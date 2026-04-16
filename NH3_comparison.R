@@ -471,7 +471,155 @@ ggsave(file.path(out_dir, "timeseries_hires_vs_OTICEcorr.png"),
 message("CRDS hires vs OTICE_corr time series saved.")
 
 # =============================================================================
-# 8. SAVE
+# 8. DAILY AVERAGES — CRDS_hires vs OTICE_corr
+#    Aggregate hourly paired data to 24-hour means; days with < 12 paired hours
+#    are excluded to avoid misleading daily averages from sparse data.
+# =============================================================================
+comparison_daily <- comparison |>
+  mutate(date = as.Date(datetime_hour, tz = "Europe/Berlin")) |>
+  group_by(date) |>
+  summarise(
+    NH3_CRDS_hires = safe_mean(NH3_CRDS_hires),
+    NH3_OTICE_corr = safe_mean(NH3_OTICE_corr),
+    CO2_CRDS_hires = safe_mean(CO2_CRDS_hires),
+    CO2_OTICE_corr = safe_mean(CO2_OTICE_corr),
+    n_hours        = n(),
+    .groups        = "drop"
+  ) |>
+  filter(n_hours >= 12)
+
+message("\nDaily paired rows (>= 12 hrs): ", nrow(comparison_daily))
+
+# --- Daily statistics ---------------------------------------------------------
+calc_stats_daily <- function(sensor_col, ref_col) {
+  y  <- comparison_daily[[sensor_col]]
+  x  <- comparison_daily[[ref_col]]
+  ok <- !is.na(y) & !is.na(x)
+  if (sum(ok) < 5) return(NULL)
+  fit <- lm(y[ok] ~ x[ok])
+  res <- y[ok] - x[ok]
+  tibble(
+    comparison  = paste0(sensor_col, " vs ", ref_col),
+    n_days      = sum(ok),
+    R2          = round(summary(fit)$r.squared, 4),
+    slope       = round(unname(coef(fit)[2]),   4),
+    intercept   = round(unname(coef(fit)[1]),   4),
+    RMSE        = round(sqrt(mean(res^2)),       4),
+    MAE         = round(mean(abs(res)),          4),
+    Bias        = round(mean(res),               4)
+  )
+}
+
+daily_stats <- bind_rows(
+  calc_stats_daily("NH3_OTICE_corr", "NH3_CRDS_hires"),
+  calc_stats_daily("CO2_OTICE_corr", "CO2_CRDS_hires")
+)
+
+cat("\n===== Daily statistics (CRDS_hires vs OTICE_corr) =====\n")
+print(daily_stats, width = 120)
+
+write.csv(comparison_daily, file.path(out_dir, "comparison_daily.csv"), row.names = FALSE)
+write.csv(daily_stats,      file.path(out_dir, "daily_stats.csv"),      row.names = FALSE)
+message("Daily CSVs saved.")
+
+# --- Daily scatter plots (side-by-side) ---------------------------------------
+daily_scatter <- function(sensor_col, ref_col, gas_label, st) {
+  d    <- comparison_daily |> filter(!is.na(.data[[ref_col]]), !is.na(.data[[sensor_col]]))
+  lims <- range(c(d[[ref_col]], d[[sensor_col]]), na.rm = TRUE)
+  pad  <- diff(lims) * 0.05
+  lims <- c(lims[1] - pad, lims[2] + pad)
+  lbl  <- paste0("n=", st$n_days, "\nR\u00b2=", st$R2,
+                 "\nSlope=", st$slope, "\nRMSE=", st$RMSE, "\nBias=", st$Bias)
+  ggplot(d, aes(x = .data[[ref_col]], y = .data[[sensor_col]])) +
+    geom_point(alpha = 0.7, size = 2, color = "steelblue") +
+    geom_smooth(method = "lm", se = TRUE, color = "red", linewidth = 0.8) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+                color = "black", linewidth = 0.5) +
+    annotate("text",
+             x = lims[1] + diff(lims) * 0.03,
+             y = lims[2] - diff(lims) * 0.03,
+             label = lbl, hjust = 0, vjust = 1, size = 3.2) +
+    scale_x_continuous(limits = lims) +
+    scale_y_continuous(limits = lims) +
+    labs(
+      title = paste0(gas_label, ": daily mean OTICE_corr vs CRDS_hires"),
+      x     = paste0(ref_col,    " (ppm)"),
+      y     = paste0(sensor_col, " (ppm)")
+    ) +
+    theme_bw(base_size = 11)
+}
+
+p_daily_scatter <-
+  daily_scatter("NH3_OTICE_corr", "NH3_CRDS_hires", "NH3",
+                daily_stats |> filter(comparison == "NH3_OTICE_corr vs NH3_CRDS_hires")) +
+  daily_scatter("CO2_OTICE_corr", "CO2_CRDS_hires", "CO2",
+                daily_stats |> filter(comparison == "CO2_OTICE_corr vs CO2_CRDS_hires")) +
+  plot_annotation(
+    title    = "Daily mean — OTICE barn-corr (node avg) vs CRDS hires",
+    subtitle = "Each point = one calendar day (days with \u2265 12 paired hours)  |  Red: OLS  |  Dashed: 1:1",
+    theme    = theme(plot.title = element_text(size = 13, face = "bold"))
+  )
+
+ggsave(file.path(out_dir, "scatter_daily_CRDS_hires_vs_OTICEcorr.png"),
+       p_daily_scatter, width = 12, height = 6, dpi = 150)
+message("Daily scatter saved.")
+
+# --- Daily time series (stacked) ----------------------------------------------
+x_scale_weekly <- scale_x_date(
+  date_breaks       = "2 weeks",
+  date_minor_breaks = "1 week",
+  date_labels       = "%d %b",
+  expand            = expansion(add = c(1, 1))
+)
+
+daily_ts_theme <- theme_bw(base_size = 11) +
+  theme(
+    legend.position  = "top",
+    legend.key.width = unit(1.2, "cm"),
+    panel.grid.major = element_line(colour = "grey80", linewidth = 0.4),
+    panel.grid.minor = element_line(colour = "grey92", linewidth = 0.25),
+    axis.text.x      = element_text(angle = 45, hjust = 1),
+    plot.title       = element_text(face = "bold", size = 12)
+  )
+
+p_daily_nh3 <- ggplot(comparison_daily |> filter(!is.na(NH3_CRDS_hires) | !is.na(NH3_OTICE_corr))) +
+  geom_line(aes(x = date, y = NH3_CRDS_hires,  color = "CRDS hires"),        linewidth = 0.8) +
+  geom_point(aes(x = date, y = NH3_CRDS_hires, color = "CRDS hires"),        size = 1.8) +
+  geom_line(aes(x = date, y = NH3_OTICE_corr,  color = "OTICE barn-corr"),   linewidth = 0.7) +
+  geom_point(aes(x = date, y = NH3_OTICE_corr, color = "OTICE barn-corr"),   size = 1.8) +
+  scale_color_manual(values = c("CRDS hires" = "#1a1a2e", "OTICE barn-corr" = "#e63946")) +
+  x_scale_weekly +
+  labs(
+    title = "NH\u2083 — Daily mean: CRDS hires vs OTICE barn-corrected (node avg)",
+    x     = NULL, y = "NH\u2083 (ppm)", color = NULL
+  ) +
+  daily_ts_theme
+
+p_daily_co2 <- ggplot(comparison_daily |> filter(!is.na(CO2_CRDS_hires) | !is.na(CO2_OTICE_corr))) +
+  geom_line(aes(x = date, y = CO2_CRDS_hires,  color = "CRDS hires"),       linewidth = 0.8) +
+  geom_point(aes(x = date, y = CO2_CRDS_hires, color = "CRDS hires"),       size = 1.8) +
+  geom_line(aes(x = date, y = CO2_OTICE_corr,  color = "OTICE barn-corr"),  linewidth = 0.7) +
+  geom_point(aes(x = date, y = CO2_OTICE_corr, color = "OTICE barn-corr"),  size = 1.8) +
+  scale_color_manual(values = c("CRDS hires" = "#1a1a2e", "OTICE barn-corr" = "#457b9d")) +
+  x_scale_weekly +
+  labs(
+    title = "CO\u2082 — Daily mean: CRDS hires vs OTICE barn-corrected (node avg)",
+    x     = NULL, y = "CO\u2082 (ppm)", color = NULL
+  ) +
+  daily_ts_theme
+
+p_daily_ts <- p_daily_nh3 / p_daily_co2 +
+  plot_annotation(
+    caption = "X-axis: major labels every 2 weeks  |  minor gridlines every week",
+    theme   = theme(plot.caption = element_text(size = 8, colour = "grey50"))
+  )
+
+ggsave(file.path(out_dir, "timeseries_daily_CRDS_hires_vs_OTICEcorr.png"),
+       p_daily_ts, width = 16, height = 10, dpi = 150)
+message("Daily time series saved.")
+
+# =============================================================================
+# 9. SAVE
 #    comparison_hourly.csv: only datetime + gas columns (no metadata)
 # =============================================================================
 comparison_out <- comparison |>
@@ -486,10 +634,14 @@ write.csv(stats_table,       file.path(out_dir, "comparison_stats.csv"),   row.n
 write.csv(otice_node_hourly, file.path(out_dir, "OTICE_node_hourly.csv"),  row.names = FALSE)
 
 cat("\nFiles saved to:", out_dir, "\n")
-cat("  comparison_hourly.csv    <- 10 columns: datetime + 3 CRDS groups + 4 OTICE\n")
-cat("  comparison_stats.csv     <- R2, RMSE, bias for all pairs vs CRDS_in\n")
-cat("  OTICE_node_hourly.csv               <- per-node hourly (nodes O04/O09/O13 excluded)\n")
-cat("  timeseries_hires_vs_OTICEcorr.png  <- NH3 & CO2 CRDS_hires vs OTICE_corr (daily scale)\n")
+cat("  comparison_hourly.csv                      <- 10 columns: datetime + 3 CRDS groups + 4 OTICE\n")
+cat("  comparison_stats.csv                       <- R2, RMSE, bias for all pairs vs CRDS_in\n")
+cat("  OTICE_node_hourly.csv                      <- per-node hourly (nodes O04/O09/O13 excluded)\n")
+cat("  comparison_daily.csv                       <- daily means (days >= 12 paired hours)\n")
+cat("  daily_stats.csv                            <- R2, RMSE, bias at daily resolution\n")
+cat("  timeseries_hires_vs_OTICEcorr.png         <- NH3 & CO2 CRDS_hires vs OTICE_corr (hourly)\n")
+cat("  scatter_daily_CRDS_hires_vs_OTICEcorr.png <- daily scatter: NH3 & CO2\n")
+cat("  timeseries_daily_CRDS_hires_vs_OTICEcorr.png <- daily time series: NH3 & CO2\n")
 cat("\nColumn naming:\n")
 cat("  NH3/CO2_CRDS_in     = CRDS location 'in'\n")
 cat("  NH3/CO2_CRDS_s      = CRDS location 's' (south)\n")
