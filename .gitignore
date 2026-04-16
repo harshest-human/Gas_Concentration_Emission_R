@@ -1,0 +1,15 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Generated output (plots, CSVs) — reproducible from scripts
+output/
+
+# Data directories — not versioned (too large / sensitive)
+raw_data/
+processed_data/
+
+# Claude Code context
+.claude/

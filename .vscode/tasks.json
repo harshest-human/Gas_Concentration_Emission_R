@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "R: Install Package",
+            "type": "process",
+            "command": "C:\\Program Files\\R\\R-4.5.3\\bin\\R.exe",
+            "args": [
+                "--silent",
+                "--no-echo",
+                "--no-save",
+                "--no-restore",
+                "-e",
+                "install.packages('languageserver', repos='https://cran.r-project.org/')"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}
