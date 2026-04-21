@@ -400,6 +400,12 @@ campaign_average_comparison <- full_join(
   crds_campaign_average,
   by = c("period_id", "period_label", "start_time", "end_time", "datetime_hour")
 ) |>
+  filter(
+    !is.na(OTICE_NH3),
+    !is.na(CRDS_NH3),
+    !is.na(OTICE_CO2),
+    !is.na(CRDS_CO2)
+  ) |>
   arrange(start_time, datetime_hour)
 
 write.csv(campaign_average_comparison,
@@ -413,7 +419,7 @@ campaign_summary_all <- campaign_average_comparison |>
   group_by(period_id, period_label) |>
   summarise(
     total_hours = n(),
-    overlap_hours = sum(!is.na(OTICE_NH3) & !is.na(CRDS_NH3)),
+    overlap_hours = n(),
     .groups = "drop"
   )
 
