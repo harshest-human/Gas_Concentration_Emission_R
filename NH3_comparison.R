@@ -43,11 +43,13 @@ OTICE_EXCLUDE  <- c("O04", "O09", "O13")
 #    location normalised to lowercase: "in", "s", numeric strings
 # =============================================================================
 crds_files <- list.files(crds_dir, pattern = "\\.csv$", full.names = TRUE)
+crds_files <- crds_files[file.info(crds_files)$size > 0]
 message("CRDS files found: ", length(crds_files))
 
 crds_raw <- lapply(crds_files, function(f) {
   df <- read.csv(f, stringsAsFactors = FALSE)
   df$location <- tolower(trimws(as.character(df$location)))
+  df$analyzer <- toupper(trimws(as.character(df$analyzer)))
   df
 }) |>
   bind_rows() |>
@@ -110,6 +112,7 @@ message("CRDS 'hires' hourly rows: ", nrow(crds_hourly_hires))
 # 2. LOAD OTICE — exclude nodes O04, O09, O13
 # =============================================================================
 otice_files <- list.files(otice_dir, pattern = "^min_calibrated.*\\.csv$", full.names = TRUE)
+otice_files <- otice_files[file.info(otice_files)$size > 0]
 message("\nOTICE files found: ", length(otice_files))
 
 otice_raw <- lapply(otice_files, read.csv, stringsAsFactors = FALSE) |>
@@ -142,6 +145,20 @@ print(node_summary, n = Inf)
 
 safe_mean <- function(x) if (all(is.na(x))) NA_real_ else mean(x, na.rm = TRUE)
 
+# Helper: campaign metadata table for OTICE node -> reference CRDS mapping.
+# End timestamps are exclusive so consecutive periods do not overlap.
+make_reference_period <- function(start_time, end_time, nodes, analyzer, locations_by_node) {
+  bind_rows(lapply(nodes, function(node) {
+    tibble(
+      start_time = as.POSIXct(start_time, tz = "Europe/Berlin"),
+      end_time   = as.POSIXct(end_time,   tz = "Europe/Berlin"),
+      Node       = node,
+      analyzer   = analyzer,
+      location   = as.character(locations_by_node[[node]])
+    )
+  }))
+}
+
 # Hourly mean per node
 otice_node_hourly <- otice_raw |>
   mutate(datetime_hour = floor_date(Datetime_Berlin, "hour")) |>
@@ -169,7 +186,228 @@ otice_hourly <- otice_node_hourly |>
 message("OTICE hourly rows: ", nrow(otice_hourly))
 
 # =============================================================================
-# 3. JOIN
+# 3. METADATA-DRIVEN CAMPAIGN REFERENCE: raw OTICE vs reference CRDS
+#    OTICE nodes are compared against the CRDS location(s) documented for each
+#    campaign period in OTICE_CRDS_calibration_routine_Silvia.docx.
+# =============================================================================
+reference_map <- bind_rows(
+  make_reference_period(
+    "2025-09-29 00:00:00", "2025-10-06 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O14"),
+    "CRDS9",
+    list(
+      O02 = c("24", "27"), O06 = c("24", "27"), O07 = c("24", "27"),
+      O11 = c("24", "27"), O17 = c("24", "27"), O18 = c("24", "27"),
+      O14 = c("24", "27")
+    )
+  ),
+  make_reference_period(
+    "2025-10-06 00:00:00", "2025-10-21 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O14", "O05"),
+    "CRDS8",
+    list(
+      O02 = "30", O06 = "30", O07 = "30", O11 = "30",
+      O17 = "30", O18 = "30", O14 = "30", O05 = "30"
+    )
+  ),
+  make_reference_period(
+    "2025-10-21 00:00:00", "2025-11-10 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O14", "O05"),
+    "CRDS8",
+    list(
+      O02 = "30", O06 = "30", O07 = "30", O11 = "30",
+      O17 = "30", O18 = "30", O14 = "30", O05 = "30"
+    )
+  ),
+  make_reference_period(
+    "2025-11-10 00:00:00", "2025-11-12 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O14", "O03"),
+    "CRDS8",
+    list(
+      O02 = "30", O06 = "30", O07 = "30", O11 = "30",
+      O17 = "30", O18 = "30", O14 = "30", O03 = "30"
+    )
+  ),
+  make_reference_period(
+    "2025-11-12 00:00:00", "2025-11-19 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O14", "O03"),
+    "CRDS8",
+    list(
+      O02 = "30", O06 = "30", O07 = "30", O11 = "30",
+      O17 = "30", O18 = "30", O14 = "30", O03 = "30"
+    )
+  ),
+  make_reference_period(
+    "2025-11-26 00:00:00", "2025-12-01 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O03"),
+    "CRDS8",
+    list(
+      O02 = "36", O06 = "30", O07 = "15", O11 = "45",
+      O17 = "42", O18 = "12", O03 = "18"
+    )
+  ),
+  make_reference_period(
+    "2025-12-01 00:00:00", "2025-12-09 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O03"),
+    "CRDS8",
+    list(
+      O02 = "36", O06 = "30", O07 = "15", O11 = "45",
+      O17 = "42", O18 = "12", O03 = "18"
+    )
+  ),
+  make_reference_period(
+    "2025-12-09 00:00:00", "2026-01-01 00:00:00",
+    c("O02", "O06", "O07", "O11", "O17", "O18", "O03"),
+    "CRDS8",
+    list(
+      O02 = "36", O06 = "30", O07 = "15", O11 = "45",
+      O17 = "42", O18 = "12", O03 = "18"
+    )
+  )
+)
+
+campaign_nodes <- reference_map |>
+  distinct(start_time, end_time, Node)
+
+crds_reference_hourly <- crds_raw |>
+  mutate(datetime_hour = floor_date(DATE.TIME, "hour")) |>
+  group_by(datetime_hour, analyzer, location) |>
+  summarise(
+    NH3_CRDS_ref = safe_mean(NH3),
+    CO2_CRDS_ref = safe_mean(CO2),
+    .groups      = "drop"
+  )
+
+otice_campaign_hourly <- otice_node_hourly |>
+  inner_join(campaign_nodes, by = "Node", relationship = "many-to-many") |>
+  filter(datetime_hour >= start_time, datetime_hour < end_time) |>
+  group_by(datetime_hour) |>
+  summarise(
+    NH3_OTICE = safe_mean(NH3_OTICE),
+    CO2_OTICE = safe_mean(CO2_OTICE),
+    n_nodes   = n_distinct(Node[!is.na(NH3_OTICE) | !is.na(CO2_OTICE)]),
+    .groups   = "drop"
+  )
+
+crds_campaign_hourly <- reference_map |>
+  inner_join(crds_reference_hourly,
+             by = c("analyzer", "location"),
+             relationship = "many-to-many") |>
+  filter(datetime_hour >= start_time, datetime_hour < end_time) |>
+  group_by(datetime_hour) |>
+  summarise(
+    NH3_CRDS_ref      = safe_mean(NH3_CRDS_ref),
+    CO2_CRDS_ref      = safe_mean(CO2_CRDS_ref),
+    n_reference_paths = n(),
+    reference_map     = paste(sort(unique(paste0(analyzer, "@", location))), collapse = ", "),
+    .groups           = "drop"
+  )
+
+comparison_campaign_raw <- full_join(
+  otice_campaign_hourly,
+  crds_campaign_hourly,
+  by = "datetime_hour"
+) |>
+  arrange(datetime_hour)
+
+message("\nMetadata-aware campaign rows: ", nrow(comparison_campaign_raw))
+message("  OTICE/CRDS overlap rows: ",
+        sum(!is.na(comparison_campaign_raw$NH3_OTICE) & !is.na(comparison_campaign_raw$NH3_CRDS_ref)))
+
+# Shared x-axis: one major label per week, minor gridline every 24 hours (1 day)
+x_scale_daily <- scale_x_datetime(
+  date_breaks       = "1 week",
+  date_minor_breaks = "1 day",
+  date_labels       = "%d %b",
+  expand            = expansion(add = c(0, 0))
+)
+
+ts_theme <- theme_bw(base_size = 11) +
+  theme(
+    legend.position   = "top",
+    legend.key.width  = unit(1.5, "cm"),
+    panel.grid.major  = element_line(colour = "grey80", linewidth = 0.4),
+    panel.grid.minor  = element_line(colour = "grey92", linewidth = 0.25),
+    axis.text.x       = element_text(angle = 45, hjust = 1),
+    plot.title        = element_text(face = "bold", size = 12)
+  )
+
+campaign_nh3 <- comparison_campaign_raw |>
+  select(datetime_hour, NH3_CRDS_ref, NH3_OTICE) |>
+  pivot_longer(-datetime_hour, names_to = "source", values_to = "ppm") |>
+  mutate(source = factor(source,
+    levels = c("NH3_CRDS_ref", "NH3_OTICE"),
+    labels = c("CRDS reference avg", "OTICE raw (node avg)")
+  ))
+
+campaign_co2 <- comparison_campaign_raw |>
+  select(datetime_hour, CO2_CRDS_ref, CO2_OTICE) |>
+  pivot_longer(-datetime_hour, names_to = "source", values_to = "ppm") |>
+  mutate(source = factor(source,
+    levels = c("CO2_CRDS_ref", "CO2_OTICE"),
+    labels = c("CRDS reference avg", "OTICE raw (node avg)")
+  ))
+
+p_campaign_nh3 <- ggplot(campaign_nh3 |> filter(!is.na(ppm)),
+                         aes(x = datetime_hour, y = ppm,
+                             color = source, linewidth = source)) +
+  geom_line() +
+  x_scale_daily +
+  scale_color_manual(values = c("CRDS reference avg" = "#1a1a2e",
+                                "OTICE raw (node avg)" = "#e76f51")) +
+  scale_linewidth_manual(values = c("CRDS reference avg" = 0.75,
+                                    "OTICE raw (node avg)" = 0.55),
+                         guide = "none") +
+  labs(
+    title = "NH3 - campaign average OTICE nodes vs metadata-matched CRDS reference",
+    x     = NULL,
+    y     = "NH3 (ppm)",
+    color = NULL
+  ) +
+  ts_theme
+
+p_campaign_co2 <- ggplot(campaign_co2 |> filter(!is.na(ppm)),
+                         aes(x = datetime_hour, y = ppm,
+                             color = source, linewidth = source)) +
+  geom_line() +
+  x_scale_daily +
+  scale_color_manual(values = c("CRDS reference avg" = "#1a1a2e",
+                                "OTICE raw (node avg)" = "#2a9d8f")) +
+  scale_linewidth_manual(values = c("CRDS reference avg" = 0.75,
+                                    "OTICE raw (node avg)" = 0.55),
+                         guide = "none") +
+  labs(
+    title = "CO2 - campaign average OTICE nodes vs metadata-matched CRDS reference",
+    x     = NULL,
+    y     = "CO2 (ppm)",
+    color = NULL
+  ) +
+  ts_theme
+
+p_campaign_raw <- p_campaign_nh3 / p_campaign_co2 +
+  plot_annotation(
+    title = "Campaign comparison - OTICE raw node average vs reference CRDS average",
+    subtitle = paste(
+      "Reference timeline from OTICE_CRDS_calibration_routine_Silvia.docx.",
+      "No metadata window was provided for 2025-11-19 to 2025-11-26."
+    ),
+    caption = "X-axis: major labels every week | minor gridlines every 24 h",
+    theme = theme(
+      plot.title = element_text(size = 13, face = "bold"),
+      plot.caption = element_text(size = 8, colour = "grey50")
+    )
+  )
+
+write.csv(comparison_campaign_raw,
+          file.path(out_dir, "comparison_campaign_raw_reference.csv"),
+          row.names = FALSE)
+
+ggsave(file.path(out_dir, "timeseries_campaign_OTICEraw_vs_CRDSref.png"),
+       p_campaign_raw, width = 20, height = 10, dpi = 150)
+message("Metadata-aware raw campaign time series saved.")
+
+# =============================================================================
+# 4. JOIN
 #    Anchor on CRDS_in hours; left-join S and hires (may be NA);
 #    inner-join OTICE (keep only hours where both instruments are present)
 # =============================================================================
@@ -189,7 +427,7 @@ message("\nPaired hourly rows: ", nrow(comparison))
 message("  Range: ", min(comparison$datetime_hour), " to ", max(comparison$datetime_hour))
 
 # =============================================================================
-# 4. STATISTICS (primary reference: CRDS_in)
+# 5. STATISTICS (primary reference: CRDS_in)
 # =============================================================================
 calc_stats <- function(df, sensor_col, ref_col, label) {
   y  <- df[[sensor_col]]
@@ -245,7 +483,7 @@ cat("===========================================================================
 print(stats_table, n = Inf, width = 140)
 
 # =============================================================================
-# 5. COVERAGE SUMMARY BY MONTH
+# 6. COVERAGE SUMMARY BY MONTH
 # =============================================================================
 coverage <- comparison |>
   mutate(month = format(datetime_hour, "%Y-%m")) |>
@@ -265,7 +503,7 @@ cat("\nMonthly coverage summary:\n")
 print(coverage, n = Inf, width = 140)
 
 # =============================================================================
-# 6. PLOTS — node-average OTICE vs CRDS_in
+# 7. PLOTS — node-average OTICE vs CRDS_in
 # =============================================================================
 
 scatter_panel <- function(df, sensor_col, ref_col, title) {
@@ -376,26 +614,8 @@ ggsave(file.path(out_dir, "bland_altman_NH3_nodeavg.png"),
 message("Bland-Altman saved.")
 
 # =============================================================================
-# 7. TIME SERIES — CRDS_hires vs OTICE_corr (daily x-axis scale)
+# 8. TIME SERIES — CRDS_hires vs OTICE_corr (daily x-axis scale)
 # =============================================================================
-
-# Shared x-axis: one major label per week, minor gridline every 24 hours (1 day)
-x_scale_daily <- scale_x_datetime(
-  date_breaks       = "1 week",
-  date_minor_breaks = "1 day",
-  date_labels       = "%d %b",
-  expand            = expansion(add = c(0, 0))
-)
-
-ts_theme <- theme_bw(base_size = 11) +
-  theme(
-    legend.position   = "top",
-    legend.key.width  = unit(1.5, "cm"),
-    panel.grid.major  = element_line(colour = "grey80", linewidth = 0.4),
-    panel.grid.minor  = element_line(colour = "grey92", linewidth = 0.25),
-    axis.text.x       = element_text(angle = 45, hjust = 1),
-    plot.title        = element_text(face = "bold", size = 12)
-  )
 
 # --- NH3 panel ---------------------------------------------------------------
 nh3_hires <- comparison |>
@@ -471,7 +691,7 @@ ggsave(file.path(out_dir, "timeseries_hires_vs_OTICEcorr.png"),
 message("CRDS hires vs OTICE_corr time series saved.")
 
 # =============================================================================
-# 8. DAILY AVERAGES — CRDS_hires vs OTICE_corr
+# 9. DAILY AVERAGES — CRDS_hires vs OTICE_corr
 #    Aggregate hourly paired data to 24-hour means; days with < 12 paired hours
 #    are excluded to avoid misleading daily averages from sparse data.
 # =============================================================================
@@ -619,7 +839,7 @@ ggsave(file.path(out_dir, "timeseries_daily_CRDS_hires_vs_OTICEcorr.png"),
 message("Daily time series saved.")
 
 # =============================================================================
-# 9. SAVE
+# 10. SAVE
 #    comparison_hourly.csv: only datetime + gas columns (no metadata)
 # =============================================================================
 comparison_out <- comparison |>
@@ -634,11 +854,13 @@ write.csv(stats_table,       file.path(out_dir, "comparison_stats.csv"),   row.n
 write.csv(otice_node_hourly, file.path(out_dir, "OTICE_node_hourly.csv"),  row.names = FALSE)
 
 cat("\nFiles saved to:", out_dir, "\n")
+cat("  comparison_campaign_raw_reference.csv      <- metadata-aware raw OTICE vs reference CRDS\n")
 cat("  comparison_hourly.csv                      <- 10 columns: datetime + 3 CRDS groups + 4 OTICE\n")
 cat("  comparison_stats.csv                       <- R2, RMSE, bias for all pairs vs CRDS_in\n")
 cat("  OTICE_node_hourly.csv                      <- per-node hourly (nodes O04/O09/O13 excluded)\n")
 cat("  comparison_daily.csv                       <- daily means (days >= 12 paired hours)\n")
 cat("  daily_stats.csv                            <- R2, RMSE, bias at daily resolution\n")
+cat("  timeseries_campaign_OTICEraw_vs_CRDSref.png <- raw OTICE node avg vs metadata-matched CRDS\n")
 cat("  timeseries_hires_vs_OTICEcorr.png         <- NH3 & CO2 CRDS_hires vs OTICE_corr (hourly)\n")
 cat("  scatter_daily_CRDS_hires_vs_OTICEcorr.png <- daily scatter: NH3 & CO2\n")
 cat("  timeseries_daily_CRDS_hires_vs_OTICEcorr.png <- daily time series: NH3 & CO2\n")
