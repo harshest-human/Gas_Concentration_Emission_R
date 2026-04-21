@@ -62,21 +62,6 @@ build_campaign_reference <- function(period_id, period_label, start_time, end_ti
   }))
 }
 
-choose_date_breaks <- function(df) {
-  if (nrow(df) == 0) {
-    return("1 day")
-  }
-
-  duration_days <- as.numeric(difftime(max(df$datetime_hour),
-                                       min(df$datetime_hour),
-                                       units = "days"))
-
-  if (duration_days > 20) return("5 days")
-  if (duration_days > 10) return("2 days")
-  if (duration_days > 4)  return("1 day")
-  "12 hours"
-}
-
 calc_campaign_stats <- function(df, sensor_col, ref_col, gas_label) {
   ok <- !is.na(df[[sensor_col]]) & !is.na(df[[ref_col]])
   if (sum(ok) < 5) {
@@ -101,8 +86,6 @@ calc_campaign_stats <- function(df, sensor_col, ref_col, gas_label) {
 }
 
 make_campaign_plot <- function(df, stats_tbl) {
-  date_breaks_value <- choose_date_breaks(df)
-
   nh3_stats <- stats_tbl |>
     filter(gas == "NH3")
 
@@ -139,7 +122,7 @@ make_campaign_plot <- function(df, stats_tbl) {
              hjust = 0, vjust = 1, size = 3.2) +
     scale_color_manual(values = c("CRDS average" = "#1a1a2e",
                                   "OTICE average" = "#e76f51")) +
-    scale_x_datetime(date_breaks = date_breaks_value,
+    scale_x_datetime(date_breaks = "1 day",
                      date_labels = "%d %b",
                      expand = expansion(mult = c(0.01, 0.02))) +
     labs(title = "NH3: hourly average OTICE nodes versus hourly average CRDS references",
@@ -163,7 +146,7 @@ make_campaign_plot <- function(df, stats_tbl) {
              hjust = 0, vjust = 1, size = 3.2) +
     scale_color_manual(values = c("CRDS average" = "#1a1a2e",
                                   "OTICE average" = "#2a9d8f")) +
-    scale_x_datetime(date_breaks = date_breaks_value,
+    scale_x_datetime(date_breaks = "1 day",
                      date_labels = "%d %b",
                      expand = expansion(mult = c(0.01, 0.02))) +
     labs(title = "CO2: hourly average OTICE nodes versus hourly average CRDS references",
