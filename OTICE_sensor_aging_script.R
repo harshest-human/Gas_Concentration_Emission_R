@@ -69,76 +69,43 @@ save_plot <- function(plot_obj, filename, width = 14, height = 8) {
   ggsave(filename = filename, plot = plot_obj, width = width, height = height, dpi = 150)
 }
 
-make_timeseries_plot <- function(df, gas_label, raw_col, ref_col, pred_col, y_label,
-                                 baseline_start, baseline_end) {
+get_plot_style <- function(gas_label) {
+  if (gas_label == "CO2") {
+    return(list(
+      raw_label = "OTICE raw",
+      cal_label = "OTICE after first-24h December calibration",
+      raw_color = "#79BCE8",
+      cal_color = "#0B4F8A",
+      ref_color = "#3F3F46"
+    ))
+  }
 
-  plot_df <- df |>
-    select(node, period_id, period_label, datetime_hour,
-           raw_value = all_of(raw_col),
-           ref_value = all_of(ref_col),
-           calibrated_value = all_of(pred_col)) |>
-    pivot_longer(
-      cols = c(ref_value, raw_value, calibrated_value),
-      names_to = "source",
-      values_to = "value"
-    ) |>
-    mutate(
-      source = recode(
-        source,
-        ref_value = "CRDS reference",
-        raw_value = "OTICE raw",
-        calibrated_value = "OTICE after first-24h December calibration"
-      )
-    )
-
-  ggplot(plot_df, aes(x = datetime_hour, y = value, color = source)) +
-    annotate(
-      "rect",
-      xmin = baseline_start,
-      xmax = baseline_end,
-      ymin = -Inf,
-      ymax = Inf,
-      alpha = 0.08,
-      fill = "goldenrod"
-    ) +
-    geom_line(linewidth = 0.6, na.rm = TRUE) +
-    facet_wrap(~ node, scales = "free_y", ncol = 2) +
-    scale_color_manual(
-      values = c(
-        "CRDS reference" = "#1a1a2e",
-        "OTICE raw" = "#e76f51",
-        "OTICE after first-24h December calibration" = "#2a9d8f"
-      )
-    ) +
-    scale_x_datetime(
-      date_breaks = "1 day",
-      date_labels = "%d %b",
-      expand = expansion(mult = c(0.01, 0.02))
-    ) +
-    labs(
-      title = paste0(gas_label, ": December node comparison through time"),
-      subtitle = paste(
-        "Yellow band = first 24 hours of the December campaign used for calibration.",
-        "Compare OTICE raw and December-calibrated lines against CRDS over time."
-      ),
-      x = NULL,
-      y = y_label,
-      color = NULL
-    ) +
-    theme_bw(base_size = 11) +
-    theme(
-      legend.position = "top",
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      plot.title = element_text(face = "bold")
-    )
+  list(
+    raw_label = "OTICE raw",
+    cal_label = "OTICE after first-24h December calibration",
+    raw_color = "#7BC67B",
+    cal_color = "#1B7F3A",
+    ref_color = "#3F3F46"
+  )
 }
 
 make_node_timeseries_plot <- function(df, node_id, gas_label, raw_col, ref_col, pred_col, y_label,
                                       baseline_start, baseline_end) {
+  style <- get_plot_style(gas_label)
+  color_values <- setNames(
+    c(style$ref_color, style$raw_color, style$cal_color),
+    c("CRDS reference", style$raw_label, style$cal_label)
+  )
+  linetype_values <- setNames(
+    c("solid", "dotted", "solid"),
+    c("CRDS reference", style$raw_label, style$cal_label)
+  )
+
   node_df <- df |>
     filter(node == node_id) |>
     select(
       datetime_hour,
+      crds_location,
       raw_value = all_of(raw_col),
       ref_value = all_of(ref_col),
       calibrated_value = all_of(pred_col)
@@ -152,12 +119,17 @@ make_node_timeseries_plot <- function(df, node_id, gas_label, raw_col, ref_col, 
       source = recode(
         source,
         ref_value = "CRDS reference",
-        raw_value = "OTICE raw",
-        calibrated_value = "OTICE after first-24h December calibration"
+        raw_value = style$raw_label,
+        calibrated_value = style$cal_label
       )
     )
 
-  ggplot(node_df, aes(x = datetime_hour, y = value, color = source)) +
+  crds_location_label <- node_df$crds_location[match(TRUE, !is.na(node_df$crds_location))]
+  if (is.na(crds_location_label) || length(crds_location_label) == 0) {
+    crds_location_label <- "unknown"
+  }
+
+  ggplot(node_df, aes(x = datetime_hour, y = value, color = source, linetype = source)) +
     annotate(
       "rect",
       xmin = baseline_start,
@@ -167,26 +139,28 @@ make_node_timeseries_plot <- function(df, node_id, gas_label, raw_col, ref_col, 
       alpha = 0.08,
       fill = "goldenrod"
     ) +
-    geom_line(linewidth = 0.7, na.rm = TRUE) +
-    geom_point(size = 1.1, alpha = 0.65, na.rm = TRUE) +
-    scale_color_manual(
-      values = c(
-        "CRDS reference" = "#1a1a2e",
-        "OTICE raw" = "#e76f51",
-        "OTICE after first-24h December calibration" = "#2a9d8f"
-      )
-    ) +
+    geom_line(linewidth = 0.9, alpha = 0.9, na.rm = TRUE) +
+    geom_point(size = 1.0, alpha = 0.5, na.rm = TRUE) +
+    scale_color_manual(values = color_values) +
+    scale_linetype_manual(values = linetype_values) +
     scale_x_datetime(
       date_breaks = "1 day",
       date_labels = "%d %b",
       expand = expansion(mult = c(0.01, 0.02))
     ) +
     labs(
-      title = paste0(gas_label, " - December comparison for OTICE node ", node_id),
-      subtitle = "Hourly OTICE raw and first-24h-December calibrated values versus mapped CRDS reference",
+      title = paste0(
+        gas_label, ": OTICE node ", node_id,
+        " compared with CRDS sampling point ", crds_location_label
+      ),
+      subtitle = paste(
+        "December 2025 hourly comparison.",
+        "Yellow band marks the first 24 hours used for calibration."
+      ),
       x = NULL,
       y = y_label,
-      color = NULL
+      color = NULL,
+      linetype = NULL
     ) +
     theme_bw(base_size = 11) +
     theme(
@@ -475,7 +449,7 @@ nh3_predictions <- node_hourly_matched |>
   ) |>
   select(
     period_id, period_label, datetime_hour, node, nh3_sensor_id, nh3_episode_id,
-    OTICE_NH3_raw, OTICE_NH3_cal, CRDS_NH3,
+    crds_location, OTICE_NH3_raw, OTICE_NH3_cal, CRDS_NH3,
     NH3_predicted_from_december24h, NH3_bias_after_december24h_cal
   )
 
@@ -491,7 +465,7 @@ co2_predictions <- node_hourly_matched |>
   ) |>
   select(
     period_id, period_label, datetime_hour, node, co2_sensor_id, co2_episode_id,
-    OTICE_CO2_raw, OTICE_CO2_cal, CRDS_CO2,
+    crds_location, OTICE_CO2_raw, OTICE_CO2_cal, CRDS_CO2,
     CO2_predicted_from_december24h, CO2_bias_after_december24h_cal
   )
 
@@ -510,14 +484,14 @@ december_nh3_comparison <- nh3_predictions |>
   filter(period_id == "C8",
          datetime_hour >= december_start,
          datetime_hour < december_end) |>
-  select(period_id, period_label, datetime_hour, node, nh3_sensor_id,
+  select(period_id, period_label, datetime_hour, node, nh3_sensor_id, crds_location,
          OTICE_NH3_raw, OTICE_NH3_cal, CRDS_NH3, NH3_predicted_from_december24h)
 
 december_co2_comparison <- co2_predictions |>
   filter(period_id == "C8",
          datetime_hour >= december_start,
          datetime_hour < december_end) |>
-  select(period_id, period_label, datetime_hour, node, co2_sensor_id,
+  select(period_id, period_label, datetime_hour, node, co2_sensor_id, crds_location,
          OTICE_CO2_raw, OTICE_CO2_cal, CRDS_CO2, CO2_predicted_from_december24h)
 
 write.csv(december_nh3_comparison,
@@ -529,22 +503,6 @@ write.csv(december_co2_comparison,
           row.names = FALSE)
 
 if (nrow(december_nh3_comparison) > 0) {
-  save_plot(
-    make_timeseries_plot(
-      december_nh3_comparison,
-      gas_label = "NH3",
-      raw_col = "OTICE_NH3_raw",
-      ref_col = "CRDS_NH3",
-      pred_col = "NH3_predicted_from_december24h",
-      y_label = "NH3 (ppm)",
-      baseline_start = december_start,
-      baseline_end = december_calibration_end
-    ),
-    file.path(out_dir, "plots", "December_NH3_all_nodes_vs_CRDS.png"),
-    width = 16,
-    height = 12
-  )
-
   for (node_id in sort(unique(december_nh3_comparison$node))) {
     save_plot(
       make_node_timeseries_plot(
@@ -566,22 +524,6 @@ if (nrow(december_nh3_comparison) > 0) {
 }
 
 if (nrow(december_co2_comparison) > 0) {
-  save_plot(
-    make_timeseries_plot(
-      december_co2_comparison,
-      gas_label = "CO2",
-      raw_col = "OTICE_CO2_raw",
-      ref_col = "CRDS_CO2",
-      pred_col = "CO2_predicted_from_december24h",
-      y_label = "CO2 (ppm)",
-      baseline_start = december_start,
-      baseline_end = december_calibration_end
-    ),
-    file.path(out_dir, "plots", "December_CO2_all_nodes_vs_CRDS.png"),
-    width = 16,
-    height = 12
-  )
-
   for (node_id in sort(unique(december_co2_comparison$node))) {
     save_plot(
       make_node_timeseries_plot(
@@ -622,6 +564,4 @@ cat("  tables/nh3_predictions_after_first24h_december_calibration.csv\n")
 cat("  tables/co2_predictions_after_first24h_december_calibration.csv\n")
 cat("  tables/december_nh3_node_vs_crds.csv\n")
 cat("  tables/december_co2_node_vs_crds.csv\n")
-cat("  plots/December_NH3_all_nodes_vs_CRDS.png\n")
-cat("  plots/December_CO2_all_nodes_vs_CRDS.png\n")
 cat("  plots/*.png\n")
