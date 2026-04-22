@@ -21,7 +21,7 @@ library(scales)
 # 1. Paths and settings
 # -----------------------------------------------------------------------------
 timezone_local <- "Europe/Berlin"
-calibration_hours <- 12
+calibration_hours <- 48
 
 args_all <- commandArgs(trailingOnly = FALSE)
 file_arg <- "--file="
@@ -117,11 +117,15 @@ assign_period_id <- function(datetime_value) {
 
 period_prefix <- function(period_id_value) {
   case_when(
-    period_id_value == "SepOct" ~ "September_October",
-    period_id_value == "November" ~ "November",
-    period_id_value == "December" ~ "December",
+    period_id_value == "SepOct" ~ "sep_oct",
+    period_id_value == "November" ~ "nov",
+    period_id_value == "December" ~ "dec",
     TRUE ~ period_id_value
   )
+}
+
+node_file_label <- function(node_value) {
+  paste0("O", suppressWarnings(as.integer(as.character(node_value))))
 }
 
 fmt_num <- function(x, digits = 2) {
@@ -289,8 +293,9 @@ make_node_daily_plot <- function(df, model_row, period_label_value, node_value, 
 
   color_values <- c(CRDS = style$ref_color, OTICE_raw = style$raw_color, OTICE_fitted = style$fit_color)
   legend_labels <- c(CRDS = "CRDS reference", OTICE_raw = "OTICE raw", OTICE_fitted = "OTICE fitted")
+  linetype_values <- c(CRDS = "solid", OTICE_raw = "dotted", OTICE_fitted = "solid")
 
-  ggplot(plot_df, aes(x = date_day, y = value, color = series)) +
+  ggplot(plot_df, aes(x = date_day, y = value, color = series, linetype = series)) +
     annotate(
       "rect",
       xmin = as.Date(model_row$calibration_start[1], tz = timezone_local),
@@ -303,6 +308,7 @@ make_node_daily_plot <- function(df, model_row, period_label_value, node_value, 
     geom_line(linewidth = 0.9, na.rm = TRUE) +
     geom_point(size = 2, alpha = 0.75, na.rm = TRUE) +
     scale_color_manual(values = color_values, labels = legend_labels) +
+    scale_linetype_manual(values = linetype_values, labels = legend_labels) +
     scale_x_date(date_breaks = "1 day", date_labels = "%d %b", expand = expansion(mult = c(0.01, 0.02))) +
     scale_y_continuous(labels = label_number(accuracy = style$accuracy), n.breaks = 12) +
     labs(
@@ -311,7 +317,8 @@ make_node_daily_plot <- function(df, model_row, period_label_value, node_value, 
       x = NULL,
       y = style$y_label,
       color = NULL,
-      caption = "Yellow band marks the actual time span of the first matched 12 hourly values used for calibration."
+      linetype = NULL,
+      caption = "Yellow band marks the actual time span of the first matched 48 hourly values used for calibration."
     ) +
     theme_bw(base_size = 11) +
     theme(
@@ -336,11 +343,13 @@ make_average_daily_plot <- function(df, avg_stats_row, period_label_value, gas_l
 
   color_values <- c(CRDS = style$ref_color, OTICE_raw = style$raw_color, OTICE_fitted = style$fit_color)
   legend_labels <- c(CRDS = "CRDS mean", OTICE_raw = "OTICE raw mean", OTICE_fitted = "OTICE fitted mean")
+  linetype_values <- c(CRDS = "solid", OTICE_raw = "dotted", OTICE_fitted = "solid")
 
-  ggplot(plot_df, aes(x = date_day, y = value, color = series)) +
+  ggplot(plot_df, aes(x = date_day, y = value, color = series, linetype = series)) +
     geom_line(linewidth = 0.9, na.rm = TRUE) +
     geom_point(size = 2, alpha = 0.75, na.rm = TRUE) +
     scale_color_manual(values = color_values, labels = legend_labels) +
+    scale_linetype_manual(values = linetype_values, labels = legend_labels) +
     scale_x_date(date_breaks = "1 day", date_labels = "%d %b", expand = expansion(mult = c(0.01, 0.02))) +
     scale_y_continuous(labels = label_number(accuracy = style$accuracy), n.breaks = 12) +
     labs(
@@ -349,7 +358,8 @@ make_average_daily_plot <- function(df, avg_stats_row, period_label_value, gas_l
       x = NULL,
       y = style$y_label,
       color = NULL,
-      caption = paste0("Average fitted values come from node-level fixed 12-hour calibrations. Reference mix: ", reference_mix_text)
+      linetype = NULL,
+      caption = paste0("Reference mix: ", reference_mix_text)
     ) +
     theme_bw(base_size = 11) +
     theme(
@@ -709,7 +719,7 @@ for (period_id_value in period_lookup$period_id) {
       )
 
       ggsave(
-        filename = file.path(plots_daily_dir, paste0(prefix_value, "_", gas_label, "_all_nodes_daily.png")),
+        filename = file.path(plots_daily_dir, paste0(prefix_value, "_", gas_label, "_all_nodes.png")),
         plot = avg_plot,
         width = 15,
         height = 8,
@@ -735,7 +745,7 @@ for (period_id_value in period_lookup$period_id) {
       )
 
       ggsave(
-        filename = file.path(plots_daily_dir, paste0(prefix_value, "_", gas_label, "_node_", node_value, "_daily.png")),
+        filename = file.path(plots_daily_dir, paste0(prefix_value, "_", gas_label, "_", node_file_label(node_value), ".png")),
         plot = node_plot,
         width = 15,
         height = 8,
