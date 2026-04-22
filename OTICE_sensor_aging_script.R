@@ -3,10 +3,10 @@
 # Fresh hourly matching workflow for aging analysis
 #
 # Main idea:
-# - import OTICE and CRDS directly from processed_data
+# - import OTICE and CRDS directly from processed_data of Silvia
 # - standardize timestamps to hourly bins
 # - map each OTICE node to the best CRDS reference within each plot period
-# - calibrate with the first 12 matched hourly values only
+# - calibrate with the first 48 matched hourly values only
 # - apply the fixed fit forward to the rest of the data
 # - summarise to daily values only for tables and plots
 # =============================================================================
