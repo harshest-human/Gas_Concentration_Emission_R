@@ -33,6 +33,7 @@ crds_dir <- file.path(base_dir, "processed_data", "CRDS8_processed")
 out_dir <- file.path(base_dir, "output", "OTICE_versus_CRDS_concentration")
 tables_dir <- file.path(out_dir, "tables")
 plots_daily_dir <- file.path(out_dir, "plots", "daily")
+plots_ppm_dir <- file.path(out_dir, "plots", "ppm_hours")
 
 if (dir.exists(out_dir)) {
   unlink(out_dir, recursive = TRUE, force = TRUE)
@@ -40,6 +41,7 @@ if (dir.exists(out_dir)) {
 
 dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(plots_daily_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(plots_ppm_dir, recursive = TRUE, showWarnings = FALSE)
 
 period_lookup <- tibble(
   period_id = c("SepOct", "November", "December"),
@@ -369,6 +371,146 @@ make_average_daily_plot <- function(df, avg_stats_row, period_label_value, gas_l
     )
 }
 
+make_selected_nodes_period_plot <- function(df, gas_label, metric_type = c("ppm_hours", "mean_ppm")) {
+  metric_type <- match.arg(metric_type)
+  style <- gas_style(gas_label)
+
+  if (metric_type == "ppm_hours") {
+    if (gas_label == "CO2") {
+      plot_df <- df |>
+        select(period_label, node, OTICE_fitted = CO2_fitted_ppm_hours, CRDS = CO2_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "CO2 cumulative exposure (ppm-hours)"
+      title_text <- "Selected OTICE nodes: CO2 ppm-hours by period"
+      subtitle_text <- "Bars compare 48-hour calibrated OTICE fitted totals with matched CRDS reference totals."
+      y_accuracy <- 1
+    } else {
+      plot_df <- df |>
+        select(period_label, node, OTICE_fitted = NH3_fitted_ppm_hours, CRDS = NH3_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "NH3 cumulative exposure (ppm-hours)"
+      title_text <- "Selected OTICE nodes: NH3 ppm-hours by period"
+      subtitle_text <- "Bars compare 48-hour calibrated OTICE fitted totals with matched CRDS reference totals."
+      y_accuracy <- 0.1
+    }
+  } else {
+    if (gas_label == "CO2") {
+      plot_df <- df |>
+        select(period_label, node, OTICE_fitted = CO2_fitted_mean_ppm, CRDS = CO2_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "CO2 mean concentration (ppm)"
+      title_text <- "Selected OTICE nodes: mean CO2 by period"
+      subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
+      y_accuracy <- 1
+    } else {
+      plot_df <- df |>
+        select(period_label, node, OTICE_fitted = NH3_fitted_mean_ppm, CRDS = NH3_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "NH3 mean concentration (ppm)"
+      title_text <- "Selected OTICE nodes: mean NH3 by period"
+      subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
+      y_accuracy <- 0.01
+    }
+  }
+
+  plot_df <- plot_df |>
+    mutate(
+      node = factor(node, levels = ppm_hour_nodes),
+      series = factor(series, levels = c("CRDS", "OTICE_fitted"))
+    )
+
+  ggplot(plot_df, aes(x = node, y = value, fill = series)) +
+    geom_col(position = position_dodge(width = 0.72), width = 0.64, na.rm = TRUE) +
+    facet_wrap(~ period_label, ncol = 1, scales = "free_y") +
+    scale_fill_manual(
+      values = c(CRDS = style$ref_color, OTICE_fitted = style$fit_color),
+      labels = c(CRDS = "CRDS reference", OTICE_fitted = "OTICE fitted")
+    ) +
+    scale_y_continuous(labels = label_number(big.mark = ",", accuracy = y_accuracy), n.breaks = 10) +
+    labs(
+      title = title_text,
+      subtitle = subtitle_text,
+      x = "OTICE node",
+      y = y_label,
+      fill = NULL
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      legend.position = "top",
+      plot.title = element_text(face = "bold"),
+      strip.text = element_text(face = "bold")
+    )
+}
+
+make_selected_nodes_total_plot <- function(df, gas_label, metric_type = c("ppm_hours", "mean_ppm")) {
+  metric_type <- match.arg(metric_type)
+  style <- gas_style(gas_label)
+
+  if (metric_type == "ppm_hours") {
+    if (gas_label == "CO2") {
+      plot_df <- df |>
+        select(node, OTICE_fitted = CO2_fitted_ppm_hours, CRDS = CO2_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "CO2 cumulative exposure (ppm-hours)"
+      title_text <- "Selected OTICE nodes: total CO2 ppm-hours"
+      subtitle_text <- "Totals sum all matched hourly values from September to December 2025."
+      y_accuracy <- 1
+    } else {
+      plot_df <- df |>
+        select(node, OTICE_fitted = NH3_fitted_ppm_hours, CRDS = NH3_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "NH3 cumulative exposure (ppm-hours)"
+      title_text <- "Selected OTICE nodes: total NH3 ppm-hours"
+      subtitle_text <- "Totals sum all matched hourly values from September to December 2025."
+      y_accuracy <- 0.1
+    }
+  } else {
+    if (gas_label == "CO2") {
+      plot_df <- df |>
+        select(node, OTICE_fitted = CO2_fitted_mean_ppm, CRDS = CO2_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "CO2 mean concentration (ppm)"
+      title_text <- "Selected OTICE nodes: total-period mean CO2"
+      subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
+      y_accuracy <- 1
+    } else {
+      plot_df <- df |>
+        select(node, OTICE_fitted = NH3_fitted_mean_ppm, CRDS = NH3_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+      y_label <- "NH3 mean concentration (ppm)"
+      title_text <- "Selected OTICE nodes: total-period mean NH3"
+      subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
+      y_accuracy <- 0.01
+    }
+  }
+
+  plot_df <- plot_df |>
+    mutate(
+      node = factor(node, levels = ppm_hour_nodes),
+      series = factor(series, levels = c("CRDS", "OTICE_fitted"))
+    )
+
+  ggplot(plot_df, aes(x = node, y = value, fill = series)) +
+    geom_col(position = position_dodge(width = 0.72), width = 0.64, na.rm = TRUE) +
+    scale_fill_manual(
+      values = c(CRDS = style$ref_color, OTICE_fitted = style$fit_color),
+      labels = c(CRDS = "CRDS reference", OTICE_fitted = "OTICE fitted")
+    ) +
+    scale_y_continuous(labels = label_number(big.mark = ",", accuracy = y_accuracy), n.breaks = 10) +
+    labs(
+      title = title_text,
+      subtitle = subtitle_text,
+      x = "OTICE node",
+      y = y_label,
+      fill = NULL
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      legend.position = "top",
+      plot.title = element_text(face = "bold")
+    )
+}
+
 # -----------------------------------------------------------------------------
 # 3. Import OTICE data and build hourly data
 # -----------------------------------------------------------------------------
@@ -639,7 +781,70 @@ for (period_id_value in period_lookup$period_id) {
 average_model_stats <- bind_rows(average_stat_rows)
 
 # -----------------------------------------------------------------------------
-# 10. Save tables
+# 10. Calculate ppm-hours for selected nodes from hourly matched data
+# -----------------------------------------------------------------------------
+ppm_hour_nodes <- c("6", "7", "11", "17")
+
+selected_nodes_ppm_hours_by_period <- node_hourly_comparison |>
+  filter(node %in% ppm_hour_nodes) |>
+  group_by(period_id, period_label, node) |>
+  summarise(
+    matched_hours = n(),
+    hours_with_co2_raw = sum(!is.na(OTICE_CO2_raw)),
+    hours_with_co2_fitted = sum(!is.na(OTICE_CO2_fitted)),
+    hours_with_co2_crds = sum(!is.na(CRDS_CO2)),
+    hours_with_nh3_raw = sum(!is.na(OTICE_NH3_raw)),
+    hours_with_nh3_fitted = sum(!is.na(OTICE_NH3_fitted)),
+    hours_with_nh3_crds = sum(!is.na(CRDS_NH3)),
+    CO2_raw_ppm_hours = sum(OTICE_CO2_raw, na.rm = TRUE),
+    CO2_fitted_ppm_hours = sum(OTICE_CO2_fitted, na.rm = TRUE),
+    CO2_crds_ppm_hours = sum(CRDS_CO2, na.rm = TRUE),
+    NH3_raw_ppm_hours = sum(OTICE_NH3_raw, na.rm = TRUE),
+    NH3_fitted_ppm_hours = sum(OTICE_NH3_fitted, na.rm = TRUE),
+    NH3_crds_ppm_hours = sum(CRDS_NH3, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    CO2_raw_mean_ppm = ifelse(hours_with_co2_raw > 0, CO2_raw_ppm_hours / hours_with_co2_raw, NA_real_),
+    CO2_fitted_mean_ppm = ifelse(hours_with_co2_fitted > 0, CO2_fitted_ppm_hours / hours_with_co2_fitted, NA_real_),
+    CO2_crds_mean_ppm = ifelse(hours_with_co2_crds > 0, CO2_crds_ppm_hours / hours_with_co2_crds, NA_real_),
+    NH3_raw_mean_ppm = ifelse(hours_with_nh3_raw > 0, NH3_raw_ppm_hours / hours_with_nh3_raw, NA_real_),
+    NH3_fitted_mean_ppm = ifelse(hours_with_nh3_fitted > 0, NH3_fitted_ppm_hours / hours_with_nh3_fitted, NA_real_),
+    NH3_crds_mean_ppm = ifelse(hours_with_nh3_crds > 0, NH3_crds_ppm_hours / hours_with_nh3_crds, NA_real_)
+  ) |>
+  arrange(factor(period_id, levels = period_lookup$period_id), as.numeric(node))
+
+selected_nodes_ppm_hours_total <- node_hourly_comparison |>
+  filter(node %in% ppm_hour_nodes) |>
+  group_by(node) |>
+  summarise(
+    matched_hours = n(),
+    hours_with_co2_raw = sum(!is.na(OTICE_CO2_raw)),
+    hours_with_co2_fitted = sum(!is.na(OTICE_CO2_fitted)),
+    hours_with_co2_crds = sum(!is.na(CRDS_CO2)),
+    hours_with_nh3_raw = sum(!is.na(OTICE_NH3_raw)),
+    hours_with_nh3_fitted = sum(!is.na(OTICE_NH3_fitted)),
+    hours_with_nh3_crds = sum(!is.na(CRDS_NH3)),
+    CO2_raw_ppm_hours = sum(OTICE_CO2_raw, na.rm = TRUE),
+    CO2_fitted_ppm_hours = sum(OTICE_CO2_fitted, na.rm = TRUE),
+    CO2_crds_ppm_hours = sum(CRDS_CO2, na.rm = TRUE),
+    NH3_raw_ppm_hours = sum(OTICE_NH3_raw, na.rm = TRUE),
+    NH3_fitted_ppm_hours = sum(OTICE_NH3_fitted, na.rm = TRUE),
+    NH3_crds_ppm_hours = sum(CRDS_NH3, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    CO2_raw_mean_ppm = ifelse(hours_with_co2_raw > 0, CO2_raw_ppm_hours / hours_with_co2_raw, NA_real_),
+    CO2_fitted_mean_ppm = ifelse(hours_with_co2_fitted > 0, CO2_fitted_ppm_hours / hours_with_co2_fitted, NA_real_),
+    CO2_crds_mean_ppm = ifelse(hours_with_co2_crds > 0, CO2_crds_ppm_hours / hours_with_co2_crds, NA_real_),
+    NH3_raw_mean_ppm = ifelse(hours_with_nh3_raw > 0, NH3_raw_ppm_hours / hours_with_nh3_raw, NA_real_),
+    NH3_fitted_mean_ppm = ifelse(hours_with_nh3_fitted > 0, NH3_fitted_ppm_hours / hours_with_nh3_fitted, NA_real_),
+    NH3_crds_mean_ppm = ifelse(hours_with_nh3_crds > 0, NH3_crds_ppm_hours / hours_with_nh3_crds, NA_real_)
+  ) |>
+  arrange(as.numeric(node))
+
+# -----------------------------------------------------------------------------
+# 11. Save tables
 # -----------------------------------------------------------------------------
 write.csv(otice_hourly, file.path(tables_dir, "otice_hourly.csv"), row.names = FALSE)
 write.csv(crds_hourly, file.path(tables_dir, "crds_hourly.csv"), row.names = FALSE)
@@ -650,6 +855,8 @@ write.csv(node_hourly_comparison, file.path(tables_dir, "node_hourly_comparison.
 write.csv(node_daily_comparison, file.path(tables_dir, "node_daily_comparison.csv"), row.names = FALSE)
 write.csv(average_model_stats, file.path(tables_dir, "average_model_stats.csv"), row.names = FALSE)
 write.csv(average_daily_comparison, file.path(tables_dir, "average_daily_comparison.csv"), row.names = FALSE)
+write.csv(selected_nodes_ppm_hours_by_period, file.path(tables_dir, "selected_nodes_ppm_hours_by_period.csv"), row.names = FALSE)
+write.csv(selected_nodes_ppm_hours_total, file.path(tables_dir, "selected_nodes_ppm_hours_total.csv"), row.names = FALSE)
 
 for (period_id_value in period_lookup$period_id) {
   prefix_value <- period_prefix(period_id_value)
@@ -683,10 +890,83 @@ for (period_id_value in period_lookup$period_id) {
     file.path(tables_dir, paste0(prefix_value, "_average_daily_comparison.csv")),
     row.names = FALSE
   )
+
+  write.csv(
+    selected_nodes_ppm_hours_by_period |> filter(period_id == period_id_value),
+    file.path(tables_dir, paste0(prefix_value, "_selected_nodes_ppm_hours.csv")),
+    row.names = FALSE
+  )
 }
 
 # -----------------------------------------------------------------------------
-# 11. Make daily plots with yellow calibration band
+# 12. Make ppm-hour summary plots for selected long-running nodes
+# -----------------------------------------------------------------------------
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_CO2_ppm_hours_by_period.png"),
+  plot = make_selected_nodes_period_plot(selected_nodes_ppm_hours_by_period, gas_label = "CO2", metric_type = "ppm_hours"),
+  width = 12,
+  height = 10,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_NH3_ppm_hours_by_period.png"),
+  plot = make_selected_nodes_period_plot(selected_nodes_ppm_hours_by_period, gas_label = "NH3", metric_type = "ppm_hours"),
+  width = 12,
+  height = 10,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_CO2_mean_ppm_by_period.png"),
+  plot = make_selected_nodes_period_plot(selected_nodes_ppm_hours_by_period, gas_label = "CO2", metric_type = "mean_ppm"),
+  width = 12,
+  height = 10,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_NH3_mean_ppm_by_period.png"),
+  plot = make_selected_nodes_period_plot(selected_nodes_ppm_hours_by_period, gas_label = "NH3", metric_type = "mean_ppm"),
+  width = 12,
+  height = 10,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_CO2_ppm_hours_total.png"),
+  plot = make_selected_nodes_total_plot(selected_nodes_ppm_hours_total, gas_label = "CO2", metric_type = "ppm_hours"),
+  width = 10,
+  height = 6,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_NH3_ppm_hours_total.png"),
+  plot = make_selected_nodes_total_plot(selected_nodes_ppm_hours_total, gas_label = "NH3", metric_type = "ppm_hours"),
+  width = 10,
+  height = 6,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_CO2_mean_ppm_total.png"),
+  plot = make_selected_nodes_total_plot(selected_nodes_ppm_hours_total, gas_label = "CO2", metric_type = "mean_ppm"),
+  width = 10,
+  height = 6,
+  dpi = 150
+)
+
+ggsave(
+  filename = file.path(plots_ppm_dir, "selected_nodes_NH3_mean_ppm_total.png"),
+  plot = make_selected_nodes_total_plot(selected_nodes_ppm_hours_total, gas_label = "NH3", metric_type = "mean_ppm"),
+  width = 10,
+  height = 6,
+  dpi = 150
+)
+
+# -----------------------------------------------------------------------------
+# 13. Make daily plots with yellow calibration band
 # -----------------------------------------------------------------------------
 for (period_id_value in period_lookup$period_id) {
   period_row <- period_lookup |> filter(period_id == period_id_value)
@@ -756,7 +1036,7 @@ for (period_id_value in period_lookup$period_id) {
 }
 
 # -----------------------------------------------------------------------------
-# 12. Console summary
+# 14. Console summary
 # -----------------------------------------------------------------------------
 cat("\n============================================================\n")
 cat("OTICE versus CRDS aging workflow\n")
@@ -773,3 +1053,4 @@ cat("Average daily rows:", nrow(average_daily_comparison), "\n")
 cat("\nFiles written to:\n")
 cat("  ", tables_dir, "\n")
 cat("  ", plots_daily_dir, "\n")
+cat("  ", plots_ppm_dir, "\n")
