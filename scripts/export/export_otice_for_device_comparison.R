@@ -1,9 +1,9 @@
 # =============================================================================
-# Export calibrated OTICE hourly data for multi-device emission comparison
+# Export calibrated otice hourly data for multi-device comparison
 #
-# OTICE has calibrated inside/node concentrations. It does not have an outside
+# otice has calibrated inside/node concentrations. It does not have an outside
 # sampling line, so this export uses CRDS location S as the shared outside
-# background for OTICE delta-concentration calculations.
+# background for otice delta-concentration calculations.
 # =============================================================================
 
 library(dplyr)
@@ -29,15 +29,21 @@ parse_hour <- function(x) {
 args_all <- commandArgs(trailingOnly = FALSE)
 file_arg <- "--file="
 script_path <- sub(file_arg, "", args_all[grepl(file_arg, args_all)])
-base_dir <- if (length(script_path) > 0) dirname(normalizePath(script_path[1])) else getwd()
-tables_dir <- file.path(base_dir, "output", "OTICE_versus_CRDS_concentration", "tables")
-
-picarro_project_dir <- "D:/Data_Analysis_R/Picarro-G2508_CRDS_gas_measurement"
-out_dir <- file.path(picarro_project_dir, "data_processed", "device_hourly")
+base_dir <- if (length(script_path) > 0) {
+  normalizePath(file.path(dirname(script_path[1]), "..", ".."), winslash = "/", mustWork = FALSE)
+} else {
+  getwd()
+}
+tables_dir <- file.path(base_dir, "workflows", "device_comparison", "result_data", "tables")
+out_dir <- file.path(base_dir, "workflows", "device_comparison", "clean_data", "device_hourly")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 otice_node_hourly_path <- file.path(tables_dir, "dec_node_hourly_comparison.csv")
-crds_hourly_path <- file.path(picarro_project_dir, "crds_data", "crds_hour", "2025", "H_CRDS8_20251209_20251231.csv")
+crds_hourly_path <- file.path(
+  base_dir,
+  "workflows", "crds_routine_cleaning", "clean_data", "crds_clean",
+  "hourly_in_out_avg", "2025", "H_CRDS8_20251209_20251231.csv"
+)
 
 otice_node_hourly <- read_csv(otice_node_hourly_path, col_types = cols(.default = col_character())) |>
   mutate(datetime_hour = parse_hour(datetime_hour)) |>
@@ -66,7 +72,7 @@ otice_for_emission <- otice_inside |>
   ) |>
   transmute(
     DATE.HOUR = format(datetime_hour, "%Y-%m-%d %H:%M:%S"),
-    analyzer = "OTICE",
+    analyzer = "otice",
     CO2_in,
     CO2_S,
     CH4_in = NA_real_,
@@ -78,13 +84,13 @@ otice_for_emission <- otice_inside |>
     delta_NH3 = NH3_in - NH3_S,
     n_otice_nodes,
     outside_reference = "CRDS8 location S",
-    note = "OTICE inside is 48-hour calibrated node mean; outside background is CRDS S."
+    note = "otice inside is 48-hour calibrated node mean; outside background is CRDS S."
   )
 
-out_file <- file.path(out_dir, "OTICE_hourly_20251209_20251222.csv")
+out_file <- file.path(out_dir, "otice_hourly_20251209_20251222.csv")
 write_csv(otice_for_emission, out_file)
 
-cat("Wrote OTICE hourly comparison file:\n", out_file, "\n")
+cat("Wrote otice hourly comparison file:\n", out_file, "\n")
 cat("Rows:", nrow(otice_for_emission), "\n")
 cat("Time range:", format(min(otice_for_emission$DATE.HOUR, na.rm = TRUE)), "to",
     format(max(otice_for_emission$DATE.HOUR, na.rm = TRUE)), "\n")

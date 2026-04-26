@@ -4,12 +4,9 @@
 .RData
 .Ruserdata
 
-# Generated output (plots, CSVs) — reproducible from scripts
-output/
-
-# Data directories — not versioned (too large / sensitive)
-raw_data/
-processed_data/
+# Workflow and shared data directories - not versioned
+workflows/
+shared_data/
 
 # Claude Code context
 .claude/

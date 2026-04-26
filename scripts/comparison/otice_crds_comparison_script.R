@@ -1,11 +1,11 @@
 # =============================================================================
-# OTICE versus CRDS concentration
+# otice versus CRDS concentration
 # Fresh hourly matching workflow for aging analysis
 #
 # Main idea:
-# - import OTICE and CRDS directly from processed_data of Silvia
+# - import otice and CRDS directly from processed_data of Silvia
 # - standardize timestamps to hourly bins
-# - map each OTICE node to the best CRDS reference within each plot period
+# - map each otice node to the best CRDS reference within each plot period
 # - calibrate with the first 48 matched hourly values only
 # - apply the fixed fit forward to the rest of the data
 # - summarise to daily values only for tables and plots
@@ -26,11 +26,15 @@ calibration_hours <- 48
 args_all <- commandArgs(trailingOnly = FALSE)
 file_arg <- "--file="
 script_path <- sub(file_arg, "", args_all[grepl(file_arg, args_all)])
-base_dir <- if (length(script_path) > 0) dirname(normalizePath(script_path[1])) else getwd()
+base_dir <- if (length(script_path) > 0) {
+  normalizePath(file.path(dirname(script_path[1]), "..", ".."), winslash = "/", mustWork = FALSE)
+} else {
+  getwd()
+}
 
-otice_dir <- file.path(base_dir, "processed_data", "OTICE_processed")
-crds_dir <- file.path(base_dir, "processed_data", "CRDS8_processed")
-out_dir <- file.path(base_dir, "output", "OTICE_versus_CRDS_concentration")
+otice_dir <- file.path(base_dir, "workflows", "device_comparison", "clean_data", "otice_clean")
+crds_dir <- file.path(base_dir, "workflows", "crds_routine_cleaning", "clean_data", "crds_clean", "step_avg")
+out_dir <- file.path(base_dir, "workflows", "device_comparison", "result_data")
 tables_dir <- file.path(out_dir, "tables")
 plots_daily_dir <- file.path(out_dir, "plots", "daily")
 plots_ppm_dir <- file.path(out_dir, "plots", "ppm_hours")
@@ -378,34 +382,34 @@ make_selected_nodes_period_plot <- function(df, gas_label, metric_type = c("ppm_
   if (metric_type == "ppm_hours") {
     if (gas_label == "CO2") {
       plot_df <- df |>
-        select(period_label, node, OTICE_fitted = CO2_fitted_ppm_hours, CRDS = CO2_crds_ppm_hours) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(period_label, node, OTICE_raw = CO2_raw_ppm_hours, OTICE_fitted = CO2_fitted_ppm_hours, CRDS = CO2_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "CO2 cumulative exposure (ppm-hours)"
       title_text <- "Selected OTICE nodes: CO2 ppm-hours by period"
-      subtitle_text <- "Bars compare 48-hour calibrated OTICE fitted totals with matched CRDS reference totals."
+      subtitle_text <- "Bars compare OTICE raw totals, 48-hour calibrated OTICE fitted totals, and matched CRDS reference totals."
       y_accuracy <- 1
     } else {
       plot_df <- df |>
-        select(period_label, node, OTICE_fitted = NH3_fitted_ppm_hours, CRDS = NH3_crds_ppm_hours) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(period_label, node, OTICE_raw = NH3_raw_ppm_hours, OTICE_fitted = NH3_fitted_ppm_hours, CRDS = NH3_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "NH3 cumulative exposure (ppm-hours)"
       title_text <- "Selected OTICE nodes: NH3 ppm-hours by period"
-      subtitle_text <- "Bars compare 48-hour calibrated OTICE fitted totals with matched CRDS reference totals."
+      subtitle_text <- "Bars compare OTICE raw totals, 48-hour calibrated OTICE fitted totals, and matched CRDS reference totals."
       y_accuracy <- 0.1
     }
   } else {
     if (gas_label == "CO2") {
       plot_df <- df |>
-        select(period_label, node, OTICE_fitted = CO2_fitted_mean_ppm, CRDS = CO2_crds_mean_ppm) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(period_label, node, OTICE_raw = CO2_raw_mean_ppm, OTICE_fitted = CO2_fitted_mean_ppm, CRDS = CO2_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "CO2 mean concentration (ppm)"
       title_text <- "Selected OTICE nodes: mean CO2 by period"
       subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
       y_accuracy <- 1
     } else {
       plot_df <- df |>
-        select(period_label, node, OTICE_fitted = NH3_fitted_mean_ppm, CRDS = NH3_crds_mean_ppm) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(period_label, node, OTICE_raw = NH3_raw_mean_ppm, OTICE_fitted = NH3_fitted_mean_ppm, CRDS = NH3_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "NH3 mean concentration (ppm)"
       title_text <- "Selected OTICE nodes: mean NH3 by period"
       subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
@@ -416,15 +420,15 @@ make_selected_nodes_period_plot <- function(df, gas_label, metric_type = c("ppm_
   plot_df <- plot_df |>
     mutate(
       node = factor(node, levels = ppm_hour_nodes),
-      series = factor(series, levels = c("CRDS", "OTICE_fitted"))
+      series = factor(series, levels = c("CRDS", "OTICE_raw", "OTICE_fitted"))
     )
 
   ggplot(plot_df, aes(x = node, y = value, fill = series)) +
     geom_col(position = position_dodge(width = 0.72), width = 0.64, na.rm = TRUE) +
     facet_wrap(~ period_label, ncol = 1, scales = "free_y") +
     scale_fill_manual(
-      values = c(CRDS = style$ref_color, OTICE_fitted = style$fit_color),
-      labels = c(CRDS = "CRDS reference", OTICE_fitted = "OTICE fitted")
+      values = c(CRDS = style$ref_color, OTICE_raw = style$raw_color, OTICE_fitted = style$fit_color),
+      labels = c(CRDS = "CRDS reference", OTICE_raw = "OTICE raw", OTICE_fitted = "OTICE fitted")
     ) +
     scale_y_continuous(labels = label_number(big.mark = ",", accuracy = y_accuracy), n.breaks = 10) +
     labs(
@@ -449,34 +453,34 @@ make_selected_nodes_total_plot <- function(df, gas_label, metric_type = c("ppm_h
   if (metric_type == "ppm_hours") {
     if (gas_label == "CO2") {
       plot_df <- df |>
-        select(node, OTICE_fitted = CO2_fitted_ppm_hours, CRDS = CO2_crds_ppm_hours) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(node, OTICE_raw = CO2_raw_ppm_hours, OTICE_fitted = CO2_fitted_ppm_hours, CRDS = CO2_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "CO2 cumulative exposure (ppm-hours)"
       title_text <- "Selected OTICE nodes: total CO2 ppm-hours"
-      subtitle_text <- "Totals sum all matched hourly values from September to December 2025."
+      subtitle_text <- "Totals sum OTICE raw, OTICE fitted, and CRDS matched hourly values from September to December 2025."
       y_accuracy <- 1
     } else {
       plot_df <- df |>
-        select(node, OTICE_fitted = NH3_fitted_ppm_hours, CRDS = NH3_crds_ppm_hours) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(node, OTICE_raw = NH3_raw_ppm_hours, OTICE_fitted = NH3_fitted_ppm_hours, CRDS = NH3_crds_ppm_hours) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "NH3 cumulative exposure (ppm-hours)"
       title_text <- "Selected OTICE nodes: total NH3 ppm-hours"
-      subtitle_text <- "Totals sum all matched hourly values from September to December 2025."
+      subtitle_text <- "Totals sum OTICE raw, OTICE fitted, and CRDS matched hourly values from September to December 2025."
       y_accuracy <- 0.1
     }
   } else {
     if (gas_label == "CO2") {
       plot_df <- df |>
-        select(node, OTICE_fitted = CO2_fitted_mean_ppm, CRDS = CO2_crds_mean_ppm) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(node, OTICE_raw = CO2_raw_mean_ppm, OTICE_fitted = CO2_fitted_mean_ppm, CRDS = CO2_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "CO2 mean concentration (ppm)"
       title_text <- "Selected OTICE nodes: total-period mean CO2"
       subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
       y_accuracy <- 1
     } else {
       plot_df <- df |>
-        select(node, OTICE_fitted = NH3_fitted_mean_ppm, CRDS = NH3_crds_mean_ppm) |>
-        pivot_longer(cols = c(OTICE_fitted, CRDS), names_to = "series", values_to = "value")
+        select(node, OTICE_raw = NH3_raw_mean_ppm, OTICE_fitted = NH3_fitted_mean_ppm, CRDS = NH3_crds_mean_ppm) |>
+        pivot_longer(cols = c(OTICE_raw, OTICE_fitted, CRDS), names_to = "series", values_to = "value")
       y_label <- "NH3 mean concentration (ppm)"
       title_text <- "Selected OTICE nodes: total-period mean NH3"
       subtitle_text <- "Means are ppm-hours divided by the number of matched valid hourly values."
@@ -487,14 +491,14 @@ make_selected_nodes_total_plot <- function(df, gas_label, metric_type = c("ppm_h
   plot_df <- plot_df |>
     mutate(
       node = factor(node, levels = ppm_hour_nodes),
-      series = factor(series, levels = c("CRDS", "OTICE_fitted"))
+      series = factor(series, levels = c("CRDS", "OTICE_raw", "OTICE_fitted"))
     )
 
   ggplot(plot_df, aes(x = node, y = value, fill = series)) +
     geom_col(position = position_dodge(width = 0.72), width = 0.64, na.rm = TRUE) +
     scale_fill_manual(
-      values = c(CRDS = style$ref_color, OTICE_fitted = style$fit_color),
-      labels = c(CRDS = "CRDS reference", OTICE_fitted = "OTICE fitted")
+      values = c(CRDS = style$ref_color, OTICE_raw = style$raw_color, OTICE_fitted = style$fit_color),
+      labels = c(CRDS = "CRDS reference", OTICE_raw = "OTICE raw", OTICE_fitted = "OTICE fitted")
     ) +
     scale_y_continuous(labels = label_number(big.mark = ",", accuracy = y_accuracy), n.breaks = 10) +
     labs(
@@ -1039,12 +1043,12 @@ for (period_id_value in period_lookup$period_id) {
 # 14. Console summary
 # -----------------------------------------------------------------------------
 cat("\n============================================================\n")
-cat("OTICE versus CRDS aging workflow\n")
+cat("otice versus CRDS aging workflow\n")
 cat("============================================================\n")
 cat("Base directory:", base_dir, "\n")
 cat("Calibration window:", calibration_hours, "matched hourly values\n")
 cat("Output directory:", out_dir, "\n")
-cat("OTICE hourly rows:", nrow(otice_hourly), "\n")
+cat("otice hourly rows:", nrow(otice_hourly), "\n")
 cat("CRDS hourly rows:", nrow(crds_hourly), "\n")
 cat("Mapped node-period references:", nrow(reference_mapping), "\n")
 cat("Matched node hourly rows:", nrow(node_hourly_comparison), "\n")
