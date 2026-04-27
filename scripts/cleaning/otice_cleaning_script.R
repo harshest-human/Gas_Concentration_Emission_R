@@ -37,8 +37,10 @@ calibration_hours <- 48
 
 clean_dir <- file.path(project_dir, "workflows", "device_comparison", "clean_data", "otice_clean")
 plot_dir <- file.path(project_dir, "workflows", "device_comparison", "result_data", "plots")
+table_dir <- file.path(project_dir, "workflows", "device_comparison", "result_data", "tables")
 dir.create(clean_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(table_dir, recursive = TRUE, showWarnings = FALSE)
 
 period_lookup <- tibble(
   period_id = c("sep_oct", "nov_2025", "dec_2025"),
@@ -196,28 +198,70 @@ fit_initial_window_model <- function(df, raw_col, ref_col, calibration_hours_val
   )
 }
 
-plot_otice_node <- function(df, gas_name, title_text) {
+gas_style <- function(gas_name) {
+  if (gas_name == "CO2") {
+    list(
+      raw_color = "#7DB7E8",
+      fit_color = "#145A96",
+      ref_color = "#3F3F46",
+      y_label = "CO2 (ppm)",
+      accuracy = 1
+    )
+  } else {
+    list(
+      raw_color = "#8BD38B",
+      fit_color = "#1F8A4C",
+      ref_color = "#3F3F46",
+      y_label = "NH3 (ppm)",
+      accuracy = 0.01
+    )
+  }
+}
+
+plot_otice_node_daily <- function(df, model_row, gas_name, title_text) {
+  style <- gas_style(gas_name)
+
   if (gas_name == "CO2") {
     plot_df <- df |>
-      select(DATE.HOUR, OTICE_raw = OTICE_CO2_raw, OTICE_fitted = OTICE_CO2_fitted, CRDS = CRDS_CO2) |>
-      pivot_longer(cols = -DATE.HOUR, names_to = "series", values_to = "value")
-    line_colors <- c("OTICE_raw" = "#7DB7E8", "OTICE_fitted" = "#145A96", "CRDS" = "#3F3F46")
-    y_label <- "CO2 (ppm)"
+      select(date_day, OTICE_raw = OTICE_CO2_raw, OTICE_fitted = OTICE_CO2_fitted, CRDS = CRDS_CO2) |>
+      pivot_longer(cols = -date_day, names_to = "series", values_to = "value")
   } else {
     plot_df <- df |>
-      select(DATE.HOUR, OTICE_raw = OTICE_NH3_raw, OTICE_fitted = OTICE_NH3_fitted, CRDS = CRDS_NH3) |>
-      pivot_longer(cols = -DATE.HOUR, names_to = "series", values_to = "value")
-    line_colors <- c("OTICE_raw" = "#8BD38B", "OTICE_fitted" = "#1F8A4C", "CRDS" = "#3F3F46")
-    y_label <- "NH3 (ppm)"
+      select(date_day, OTICE_raw = OTICE_NH3_raw, OTICE_fitted = OTICE_NH3_fitted, CRDS = CRDS_NH3) |>
+      pivot_longer(cols = -date_day, names_to = "series", values_to = "value")
   }
 
-  ggplot(plot_df, aes(x = DATE.HOUR, y = value, color = series)) +
-    geom_line(linewidth = 0.6, na.rm = TRUE) +
-    scale_color_manual(values = line_colors) +
-    labs(title = title_text, x = NULL, y = y_label, color = NULL) +
-    theme_classic(base_size = 15) +
+  color_values <- c(CRDS = style$ref_color, OTICE_raw = style$raw_color, OTICE_fitted = style$fit_color)
+  linetype_values <- c(CRDS = "solid", OTICE_raw = "dotted", OTICE_fitted = "solid")
+  legend_labels <- c(CRDS = "CRDS reference", OTICE_raw = "OTICE raw", OTICE_fitted = "OTICE fitted")
+
+  ggplot(plot_df, aes(x = date_day, y = value, color = series, linetype = series, group = series)) +
+    annotate(
+      "rect",
+      xmin = as.Date(model_row$calibration_start[1], tz = timezone_local),
+      xmax = as.Date(model_row$calibration_end[1], tz = timezone_local),
+      ymin = -Inf,
+      ymax = Inf,
+      fill = "goldenrod",
+      alpha = 0.12
+    ) +
+    geom_line(linewidth = 0.9, na.rm = TRUE) +
+    geom_point(size = 1.8, alpha = 0.8, na.rm = TRUE) +
+    scale_color_manual(values = color_values, labels = legend_labels) +
+    scale_linetype_manual(values = linetype_values, labels = legend_labels) +
+    scale_x_date(date_breaks = "1 day", date_labels = "%d-%m-%Y", expand = expansion(mult = c(0.01, 0.02))) +
+    scale_y_continuous(labels = scales::label_number(accuracy = style$accuracy), n.breaks = 10) +
+    labs(
+      title = title_text,
+      x = NULL,
+      y = style$y_label,
+      color = NULL,
+      linetype = NULL,
+      caption = "Yellow band marks the first 48 matched hourly values used for calibration."
+    ) +
+    theme_bw(base_size = 12) +
     theme(
-      plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+      plot.title = element_text(face = "bold", hjust = 0.5, size = 15),
       axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
       legend.position = "bottom",
       panel.border = element_rect(color = "black", fill = NA)
@@ -385,6 +429,7 @@ otice_node_model_stats <- bind_rows(model_stats) |>
 
 write_csv(otice_node_hourly_calibrated, file.path(clean_dir, "otice_node_hourly_calibrated_all.csv"))
 write_csv(otice_node_model_stats, file.path(clean_dir, "otice_node_model_stats.csv"))
+write_csv(otice_node_model_stats, file.path(table_dir, "otice_node_model_stats.csv"))
 
 for (i in seq_len(nrow(period_lookup))) {
   period_row <- period_lookup[i, ]
@@ -415,6 +460,41 @@ otice_hourly_inside <- otice_node_hourly_calibrated |>
   arrange(period_id, DATE.HOUR)
 
 write_csv(otice_hourly_inside, file.path(clean_dir, "otice_hourly_inside_all.csv"))
+
+node_daily_comparison <- otice_node_hourly_calibrated |>
+  mutate(date_day = as.Date(DATE.HOUR, tz = timezone_local)) |>
+  group_by(period_id, date_day, node, analyzer, crds_location) |>
+  summarise(
+    OTICE_CO2_raw = safe_mean(OTICE_CO2_raw),
+    OTICE_CO2_fitted = safe_mean(OTICE_CO2_fitted),
+    CRDS_CO2 = safe_mean(CRDS_CO2),
+    OTICE_NH3_raw = safe_mean(OTICE_NH3_raw),
+    OTICE_NH3_fitted = safe_mean(OTICE_NH3_fitted),
+    CRDS_NH3 = safe_mean(CRDS_NH3),
+    matched_hours = n(),
+    .groups = "drop"
+  ) |>
+  arrange(period_id, as.numeric(node), date_day)
+
+write_csv(node_daily_comparison, file.path(clean_dir, "otice_node_daily_comparison_all.csv"))
+write_csv(node_daily_comparison, file.path(table_dir, "otice_node_daily_comparison_all.csv"))
+
+average_daily_comparison <- node_daily_comparison |>
+  group_by(period_id, date_day) |>
+  summarise(
+    OTICE_CO2_raw_mean = safe_mean(OTICE_CO2_raw),
+    OTICE_CO2_fitted_mean = safe_mean(OTICE_CO2_fitted),
+    CRDS_CO2_mean = safe_mean(CRDS_CO2),
+    OTICE_NH3_raw_mean = safe_mean(OTICE_NH3_raw),
+    OTICE_NH3_fitted_mean = safe_mean(OTICE_NH3_fitted),
+    CRDS_NH3_mean = safe_mean(CRDS_NH3),
+    n_nodes = n_distinct(node),
+    .groups = "drop"
+  ) |>
+  arrange(period_id, date_day)
+
+write_csv(average_daily_comparison, file.path(clean_dir, "otice_average_daily_comparison_all.csv"))
+write_csv(average_daily_comparison, file.path(table_dir, "otice_average_daily_comparison_all.csv"))
 
 crds_outside_files <- list.files(
   file.path(project_dir, "workflows", "crds_routine_cleaning", "clean_data", "crds_clean", "hourly_in_out_avg"),
@@ -461,6 +541,57 @@ otice_hourly_for_comparison <- otice_hourly_inside |>
 
 write_csv(otice_hourly_for_comparison, file.path(clean_dir, "otice_hourly_for_comparison_all.csv"))
 
+all_node_ppm_hours_by_period <- otice_node_hourly_calibrated |>
+  group_by(period_id, node) |>
+  summarise(
+    matched_hours = n(),
+    hours_with_co2_raw = sum(!is.na(OTICE_CO2_raw)),
+    hours_with_co2_fitted = sum(!is.na(OTICE_CO2_fitted)),
+    hours_with_co2_crds = sum(!is.na(CRDS_CO2)),
+    hours_with_nh3_raw = sum(!is.na(OTICE_NH3_raw)),
+    hours_with_nh3_fitted = sum(!is.na(OTICE_NH3_fitted)),
+    hours_with_nh3_crds = sum(!is.na(CRDS_NH3)),
+    CO2_raw_ppm_hours = sum(OTICE_CO2_raw, na.rm = TRUE),
+    CO2_fitted_ppm_hours = sum(OTICE_CO2_fitted, na.rm = TRUE),
+    CO2_crds_ppm_hours = sum(CRDS_CO2, na.rm = TRUE),
+    NH3_raw_ppm_hours = sum(OTICE_NH3_raw, na.rm = TRUE),
+    NH3_fitted_ppm_hours = sum(OTICE_NH3_fitted, na.rm = TRUE),
+    NH3_crds_ppm_hours = sum(CRDS_NH3, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    CO2_raw_mean_ppm = ifelse(hours_with_co2_raw > 0, CO2_raw_ppm_hours / hours_with_co2_raw, NA_real_),
+    CO2_fitted_mean_ppm = ifelse(hours_with_co2_fitted > 0, CO2_fitted_ppm_hours / hours_with_co2_fitted, NA_real_),
+    CO2_crds_mean_ppm = ifelse(hours_with_co2_crds > 0, CO2_crds_ppm_hours / hours_with_co2_crds, NA_real_),
+    NH3_raw_mean_ppm = ifelse(hours_with_nh3_raw > 0, NH3_raw_ppm_hours / hours_with_nh3_raw, NA_real_),
+    NH3_fitted_mean_ppm = ifelse(hours_with_nh3_fitted > 0, NH3_fitted_ppm_hours / hours_with_nh3_fitted, NA_real_),
+    NH3_crds_mean_ppm = ifelse(hours_with_nh3_crds > 0, NH3_crds_ppm_hours / hours_with_nh3_crds, NA_real_),
+    node_group = ifelse(node %in% c("6", "7", "11", "17"), "old_nodes", "new_nodes")
+  ) |>
+  arrange(period_id, as.numeric(node))
+
+write_csv(all_node_ppm_hours_by_period, file.path(clean_dir, "otice_node_ppm_hours_by_period_all.csv"))
+write_csv(all_node_ppm_hours_by_period, file.path(table_dir, "otice_node_ppm_hours_by_period_all.csv"))
+
+node_group_ppm_hours_by_period <- otice_node_hourly_calibrated |>
+  mutate(node_group = ifelse(node %in% c("6", "7", "11", "17"), "old_nodes", "new_nodes")) |>
+  group_by(period_id, node_group) |>
+  summarise(
+    n_nodes = n_distinct(node),
+    matched_hours = n(),
+    CO2_raw_ppm_hours = sum(OTICE_CO2_raw, na.rm = TRUE),
+    CO2_fitted_ppm_hours = sum(OTICE_CO2_fitted, na.rm = TRUE),
+    CO2_crds_ppm_hours = sum(CRDS_CO2, na.rm = TRUE),
+    NH3_raw_ppm_hours = sum(OTICE_NH3_raw, na.rm = TRUE),
+    NH3_fitted_ppm_hours = sum(OTICE_NH3_fitted, na.rm = TRUE),
+    NH3_crds_ppm_hours = sum(CRDS_NH3, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(period_id, node_group)
+
+write_csv(node_group_ppm_hours_by_period, file.path(clean_dir, "otice_node_group_ppm_hours_by_period_all.csv"))
+write_csv(node_group_ppm_hours_by_period, file.path(table_dir, "otice_node_group_ppm_hours_by_period_all.csv"))
+
 for (i in seq_len(nrow(period_lookup))) {
   period_row <- period_lookup[i, ]
   inside_df <- otice_hourly_inside |>
@@ -475,11 +606,47 @@ for (i in seq_len(nrow(period_lookup))) {
   if (nrow(compare_df) > 0) {
     write_csv(compare_df, file.path(clean_dir, paste0("otice_hourly_for_comparison_", period_row$file_tag, ".csv")))
   }
+
+  write_csv(
+    node_daily_comparison |>
+      filter(period_id == period_row$period_id),
+    file.path(clean_dir, paste0("otice_node_daily_comparison_", period_row$file_tag, ".csv"))
+  )
+
+  write_csv(
+    average_daily_comparison |>
+      filter(period_id == period_row$period_id),
+    file.path(clean_dir, paste0("otice_average_daily_comparison_", period_row$file_tag, ".csv"))
+  )
+
+  write_csv(
+    all_node_ppm_hours_by_period |>
+      filter(period_id == period_row$period_id),
+    file.path(clean_dir, paste0("otice_node_ppm_hours_", period_row$file_tag, ".csv"))
+  )
+
+  write_csv(
+    node_group_ppm_hours_by_period |>
+      filter(period_id == period_row$period_id),
+    file.path(clean_dir, paste0("otice_node_group_ppm_hours_", period_row$file_tag, ".csv"))
+  )
+
+  write_csv(
+    all_node_ppm_hours_by_period |>
+      filter(period_id == period_row$period_id),
+    file.path(table_dir, paste0("otice_node_ppm_hours_", period_row$file_tag, ".csv"))
+  )
+
+  write_csv(
+    node_group_ppm_hours_by_period |>
+      filter(period_id == period_row$period_id),
+    file.path(table_dir, paste0("otice_node_group_ppm_hours_", period_row$file_tag, ".csv"))
+  )
 }
 
 for (i in seq_len(nrow(period_lookup))) {
   period_row <- period_lookup[i, ]
-  period_df <- otice_node_hourly_calibrated |>
+  period_df <- node_daily_comparison |>
     filter(period_id == period_row$period_id)
 
   if (nrow(period_df) == 0) {
@@ -490,14 +657,22 @@ for (i in seq_len(nrow(period_lookup))) {
     node_df <- period_df |>
       filter(node == node_value)
 
-    co2_plot <- plot_otice_node(
+    co2_model <- otice_node_model_stats |>
+      filter(period_id == period_row$period_id, gas == "CO2", node == node_value)
+
+    nh3_model <- otice_node_model_stats |>
+      filter(period_id == period_row$period_id, gas == "NH3", node == node_value)
+
+    co2_plot <- plot_otice_node_daily(
       node_df,
+      model_row = co2_model,
       gas_name = "CO2",
       title_text = paste("OTICE node O", node_value, "CO2", period_row$file_tag)
     )
 
-    nh3_plot <- plot_otice_node(
+    nh3_plot <- plot_otice_node_daily(
       node_df,
+      model_row = nh3_model,
       gas_name = "NH3",
       title_text = paste("OTICE node O", node_value, "NH3", period_row$file_tag)
     )

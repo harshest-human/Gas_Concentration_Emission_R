@@ -257,6 +257,18 @@ otice_data <- read_clean_device_file(
   ) |>
   finalize_device_data()
 
+otice_raw_data <- read_clean_device_file(
+  file.path(project_dir, "workflows", "device_comparison", "clean_data", "otice_clean", "otice_hourly_for_comparison_dec_2025.csv")
+) |>
+  mutate(
+    DATE.HOUR = parse_datetime_local(DATE.HOUR),
+    analyzer = "otice_raw",
+    delta_CO2 = as.numeric(delta_CO2_raw),
+    delta_CH4 = NA_real_,
+    delta_NH3 = as.numeric(delta_NH3_raw)
+  ) |>
+  finalize_device_data()
+
 # -----------------------------------------------------------------------------
 # 5. Combine device data and calculate emissions
 # -----------------------------------------------------------------------------
@@ -312,6 +324,57 @@ daily_summary <- emission_data |>
   )
 
 write_csv(daily_summary, file.path(table_dir, "daily_summary_20251209_20251222.csv"))
+
+delta_summary_table <- bind_rows(crds_data, logas_ndir_data, logas_tdlas_data, otice_raw_data, otice_data) |>
+  mutate(analyzer = as.character(analyzer)) |>
+  pivot_longer(
+    cols = c(delta_CO2, delta_CH4, delta_NH3),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  filter(!is.na(value)) |>
+  group_by(analyzer, variable) |>
+  summarise(
+    n_hours = n(),
+    mean_value = mean(value, na.rm = TRUE),
+    sd_value = sd(value, na.rm = TRUE),
+    se_value = sd_value / sqrt(n_hours),
+    summary_text = paste0(round(mean_value, 3), " +/- ", round(se_value, 3)),
+    .groups = "drop"
+  ) |>
+  arrange(variable, analyzer)
+
+precision_vs_crds_table <- bind_rows(crds_data, logas_ndir_data, logas_tdlas_data, otice_raw_data, otice_data) |>
+  mutate(analyzer = as.character(analyzer)) |>
+  pivot_longer(
+    cols = c(delta_CO2, delta_CH4, delta_NH3),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  select(DATE.HOUR, analyzer, variable, value) |>
+  pivot_wider(names_from = analyzer, values_from = value) |>
+  pivot_longer(
+    cols = any_of(c("logas_ndir", "logas_tdlas", "otice_raw", "otice")),
+    names_to = "compare_analyzer",
+    values_to = "compare_value"
+  ) |>
+  filter(!is.na(crds), !is.na(compare_value)) |>
+  mutate(diff_vs_crds = compare_value - crds) |>
+  group_by(compare_analyzer, variable) |>
+  summarise(
+    paired_hours = n(),
+    mean_diff = mean(diff_vs_crds, na.rm = TRUE),
+    sd_diff = sd(diff_vs_crds, na.rm = TRUE),
+    se_diff = sd_diff / sqrt(paired_hours),
+    mae = mean(abs(diff_vs_crds), na.rm = TRUE),
+    rmse = sqrt(mean(diff_vs_crds^2, na.rm = TRUE)),
+    summary_text = paste0(round(mean_diff, 3), " +/- ", round(se_diff, 3)),
+    .groups = "drop"
+  ) |>
+  arrange(variable, compare_analyzer)
+
+write_csv(delta_summary_table, file.path(table_dir, "dec_device_delta_summary.csv"))
+write_csv(precision_vs_crds_table, file.path(table_dir, "dec_device_delta_precision_vs_crds.csv"))
 
 # -----------------------------------------------------------------------------
 # 7. Save plots
