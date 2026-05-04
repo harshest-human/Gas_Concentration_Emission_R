@@ -219,9 +219,8 @@ raw_data <- read_csv(
   filter(!is.na(datetime_local)) |>
   arrange(datetime_local)
 
-# Aggregate component data to hourly means before deriving wind speed
-# and direction. This keeps the output aligned with hourly summaries
-# derived from the vector components.
+# Aggregate component data to hourly means before deriving wind speed and direction.
+# This keeps the output aligned with hourly summaries derived from the vector components.
 hourly_data <- raw_data |>
   mutate(datetime_hour = floor_date(datetime_local, unit = "hour")) |>
   group_by(datetime_hour) |>
