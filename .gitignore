@@ -21,5 +21,11 @@ workflows/usa_wind_trend/scripts/*
 workflows/usa_wind_trend/result_data/*
 !workflows/usa_wind_trend/result_data/usa_mast_16_wind_methods_results.txt
 
+!workflows/crds_routine_cleaning/
+workflows/crds_routine_cleaning/*
+!workflows/crds_routine_cleaning/scripts/
+workflows/crds_routine_cleaning/scripts/*
+!workflows/crds_routine_cleaning/scripts/crds_weekly_cleaning.R
+
 # Claude Code context
 .claude/
