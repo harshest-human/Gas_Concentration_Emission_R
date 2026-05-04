@@ -9,13 +9,13 @@ library(tidyr)
 # Small helper functions
 # ------------------------------------------------------------
 # Calculate horizontal wind speed from the u and v components.
-# We use only the horizontal wind here because wind roses are based on horizontal flow, while w is kept separately in the output data.
+#  wind roses are based on horizontal flow u and v
+# w is kept separately in the output data.
 uv_to_ws <- function(u, v) {
   sqrt((u ^ 2) + (v ^ 2))
 }
 
 # Convert u and v into meteorological wind direction.
-# The result is the direction the wind comes from, in degrees clockwise from north.
 uv_to_wd <- function(u, v) {
   wd <- (270 - atan2(v, u) * 180 / pi) %% 360
   wd[uv_to_ws(u, v) == 0] <- NA_real_
@@ -39,7 +39,7 @@ format_date_range <- function(start_date, end_date) {
 }
 
 # Build one windrose figure with several panels.
-# The same frequency-ring scale is used in all panels so the figures are easy to compare across seasons or days.
+# Standardfrequency-ring scale figures to compare across seasons or days.
 build_faceted_windrose_plot <- function(
   data,
   facet_var,
