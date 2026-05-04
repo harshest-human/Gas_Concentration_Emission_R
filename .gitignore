@@ -8,5 +8,18 @@
 workflows/
 shared_data/
 
+# Keep most workflow contents ignored, but allow selected lightweight
+# workflow code/report files to be versioned.
+!workflows/
+workflows/*
+!workflows/usa_wind_trend/
+workflows/usa_wind_trend/*
+!workflows/usa_wind_trend/scripts/
+workflows/usa_wind_trend/scripts/*
+!workflows/usa_wind_trend/scripts/usa_mast_16_wind_processing_script.R
+!workflows/usa_wind_trend/result_data/
+workflows/usa_wind_trend/result_data/*
+!workflows/usa_wind_trend/result_data/usa_mast_16_wind_methods_results.txt
+
 # Claude Code context
 .claude/
