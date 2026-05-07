@@ -27,5 +27,14 @@ workflows/crds_routine_cleaning/*
 workflows/crds_routine_cleaning/scripts/*
 !workflows/crds_routine_cleaning/scripts/crds_weekly_cleaning.R
 
+# Allow Version_7 reviewer-revision analysis scripts (added for
+# Biosystems Engineering YBENG-D-26-00430 first-revision response).
+!workflows/ringversuche_analysis/
+workflows/ringversuche_analysis/*
+!workflows/ringversuche_analysis/scripts/
+workflows/ringversuche_analysis/scripts/*
+!workflows/ringversuche_analysis/scripts/v7/
+!workflows/ringversuche_analysis/scripts/v7/**
+
 # Claude Code context
 .claude/
