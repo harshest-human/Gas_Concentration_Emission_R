@@ -68,7 +68,7 @@ Reviewer comments addressed: **R2.18** (NE/SW relabel) and **R1.12**
 - `09_wind_conditional_BA_summary.png`
 - `10_variance_decomposition.png`
 
-### Version_8 plots (output, 36 files)
+### Version_8 plots (output, 33 files)
 - `02_regression_delta_CH4.png`
 - `02_regression_delta_CO2.png`
 - `02_regression_delta_NH3.png`
@@ -82,27 +82,24 @@ Reviewer comments addressed: **R2.18** (NE/SW relabel) and **R1.12**
 - `09_wind_conditional_BA_summary.png`
 - `10_variance_decomposition.png`
 - `abs_concentration_diff.png`
+- `c_boxplot.png`
 - `c_errorbarplot.png`
 - `c_trend_plot.png`
-- `d_CH4_heatmap.png`
-- `d_CO2_heatmap.png`
+- `d_boxplot.png`
 - `d_corrgram.png`
 - `d_cvplot.png`
 - `d_errorbarplot.png`
-- `d_NH3_heatmap.png`
 - `d_trend_plot.png`
 - `delta_concentration_diff.png`
 - `e_BlandAltman_AnalyzerA.png`
 - `e_BlandAltman_AnalyzerB.png`
-- `e_CH4_heatmap.png`
-- `e_NH3_heatmap.png`
 - `q_BlandAltman_AnalyzerA.png`
 - `q_BlandAltman_AnalyzerB.png`
+- `q_e_boxplot.png`
 - `q_e_corrgram.png`
 - `q_e_cvplot.png`
 - `q_e_errorbarplot.png`
 - `q_e_trend_plot.png`
-- `q_heatmap.png`
 - `vent_emission_diff.png`
 - `weather_trendplot.png`
 

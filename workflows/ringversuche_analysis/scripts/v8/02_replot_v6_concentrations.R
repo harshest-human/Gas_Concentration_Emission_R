@@ -180,23 +180,23 @@ v8_run_v6_plots <- function() {
                     error = function(e) { message("emicorrgram emission: ", e$message); NULL })
   if (!is.null(qe_cg)) v8_ggsave(qe_cg, "q_e_corrgram.png", 10, 6, clip_y0 = FALSE)
 
-  # ---------- heatmaps (use stat table that has cv column) ---------
-  emission_stat <- read_csv(file.path(v8_v6_tables, "emission_stat.csv"),
-                            show_col_types = FALSE, guess_max = 50000) %>%
-    filter(analyzer != "baseline") %>%
-    relabel_ne_sw_strings()
-  v8_hm_save <- function(filename, var, w = 8, h = 8) {
-    p <- tryCatch(emiheatmap(emission_stat, vars = var, time.group = "hour",
-                             locations = ne_sw),
-                  error = function(e) { message("emiheatmap ", var, ": ", e$message); NULL })
-    if (!is.null(p)) v8_ggsave(p, filename, w, h, clip_y0 = FALSE)
-  }
-  v8_hm_save("d_CO2_heatmap.png", "delta_CO2")
-  v8_hm_save("d_CH4_heatmap.png", "delta_CH4")
-  v8_hm_save("d_NH3_heatmap.png", "delta_NH3")
-  v8_hm_save("e_CH4_heatmap.png", "e_CH4_ghLU")
-  v8_hm_save("e_NH3_heatmap.png", "e_NH3_ghLU")
-  v8_hm_save("q_heatmap.png",     "Q_vent")
+  # ---------- box+jitter per analyzer per location (NEW in v8) -----
+  # Replaces the v6 errorbar mean+SE plots; full boxplots show the
+  # per-cycle distribution rather than just the summary point.
+  cb <- v8_box_plot(concentration_reshaped,
+                    vars = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"),
+                    locations = in_ne_sw)
+  db <- v8_box_plot(concentration_reshaped,
+                    vars = c("delta_CO2","delta_CH4","delta_NH3"),
+                    locations = ne_sw)
+  qb <- v8_box_plot(emission_reshaped,
+                    vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+                    locations = ne_sw)
+  v8_ggsave(cb, "c_boxplot.png",   12, 9, clip_y0 = TRUE)
+  v8_ggsave(db, "d_boxplot.png",   10, 9, clip_y0 = TRUE)
+  v8_ggsave(qb, "q_e_boxplot.png", 10, 9, clip_y0 = FALSE)
+
+  # CV heatmaps removed in v8 (per reviewer feedback - not needed).
 
   # ---------- CV scatter (emipointplot) ----------------------------
   v8_pp_save <- function(filename, df, vars, w = 10, h = 7) {
