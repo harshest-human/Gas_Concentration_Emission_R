@@ -36,5 +36,9 @@ workflows/ringversuche_analysis/scripts/*
 !workflows/ringversuche_analysis/scripts/v7/
 !workflows/ringversuche_analysis/scripts/v7/**
 
+# Allow Version_8 reviewer-revision NE/SW relabel + y-clip scripts.
+!workflows/ringversuche_analysis/scripts/v8/
+!workflows/ringversuche_analysis/scripts/v8/**
+
 # Claude Code context
 .claude/
