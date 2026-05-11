@@ -10,12 +10,44 @@ piclean <- function(input_path, gas, start_time, end_time, flush, interval,
   required_cols    <- c("DATE", "TIME", "MPVPosition")
   all_needed_cols  <- unique(c(required_cols, gas))
 
-  # Step 1: Load all .dat files
+  # Step 1: Load only .dat files inside the requested date window.
+  # Picarro layout: <input_path>/datalog_user/YYYY/MM/DD/*.dat. We construct
+  # the day-folder paths from start_time/end_time and only descend into those,
+  # so the whole history isn't scanned. If the layout isn't found, we fall back
+  # to a full recursive scan (compatible with the old raw_data folder).
   appendData <- function() {
-    dat_files   <- list.files(input_path, recursive = TRUE,
+    start_date <- as.Date(as.POSIXct(start_time))
+    end_date   <- as.Date(as.POSIXct(end_time))
+    day_seq    <- seq(start_date, end_date, by = "day")
+
+    base <- if (dir.exists(file.path(input_path, "datalog_user"))) {
+      file.path(input_path, "datalog_user")
+    } else {
+      input_path
+    }
+
+    day_dirs <- file.path(
+      base,
+      format(day_seq, "%Y"),
+      format(day_seq, "%m"),
+      format(day_seq, "%d")
+    )
+    day_dirs <- day_dirs[dir.exists(day_dirs)]
+
+    if (length(day_dirs) > 0) {
+      cat(sprintf("Scanning %d day folder(s) in %s\n", length(day_dirs), base))
+      dat_files <- unlist(lapply(day_dirs, function(d) {
+        list.files(d, pattern = "\\.dat$", full.names = TRUE)
+      }), use.names = FALSE)
+    } else {
+      cat("No date-structured day folders found; falling back to recursive scan.\n")
+      dat_files <- list.files(input_path, recursive = TRUE,
                               pattern = "\\.dat$", full.names = TRUE)
+    }
+
     total_files <- length(dat_files)
-    data_list   <- vector("list", total_files)
+    cat(sprintf("Found %d .dat file(s) for date range\n", total_files))
+    data_list <- vector("list", total_files)
 
     for (i in seq_along(dat_files)) {
       current_data <- tryCatch(fread(dat_files[i]), error = function(e) NULL)
@@ -348,12 +380,12 @@ autocrds <- function(input_path, output_path,
 }
 
 
-##### 20260501_20260509 #####
-CRDS8_20260501_20260509 <- autocrds(
-  input_path  = "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/crds_routine_cleaning/raw_data",
+##### 20260309_20260509 #####
+CRDS8_20260309_20260509 <- autocrds(
+  input_path  = "D:/Data_Analysis_R/owncloud_sync_data/CRDS08_raw",
   output_path = "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/crds_routine_cleaning/clean_data/crds_clean",
   gas         = c("CO2", "CH4", "NH3", "H2O", "N2O"),
-  start_time  = "2026-05-01 02:34:56",
+  start_time  = "2026-03-09 08:35:00",
   end_time    = "2026-05-09 01:54:17",
   flush       = 60,
   interval    = 240,
@@ -361,5 +393,5 @@ CRDS8_20260501_20260509 <- autocrds(
   location.levels    = c("1","2","3","4","5","6","7","in","S"),
   lab         = "ATB",
   analyzer    = "CRDS8",
-  sites       = c("IN", "S", "N")
+  sites       = c("IN", "S")
 )
