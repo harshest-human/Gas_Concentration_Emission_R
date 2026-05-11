@@ -1,0 +1,142 @@
+Registered S3 method overwritten by 'lme4':
+  method           from
+  na.action.merMod car 
+v7 setup: the following packages are missing and should be installed:
+  lmerTest, performance, epiR
+v7 setup complete: outputs to D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis/result_data/plots/Version_7 and D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis/result_data/tables/Version_7
+v7 driver: sourcing v6 main script at D:\Data_Analysis_R\Gas_Concentration_Emission_R\workflows\ringversuche_analysis\scripts\Ringversuche_analysis_script.R
+
+Attaching package: 'reshape2'
+
+The following object is masked from 'package:tidyr':
+
+    smiths
+
+
+Attaching package: 'gridExtra'
+
+The following object is masked from 'package:dplyr':
+
+    combine
+
+Linking to ImageMagick 6.9.13.29
+Enabled features: cairo, freetype, fftw, ghostscript, heic, lcms, pango, raw, rsvg, webp
+Disabled features: fontconfig, x11
+
+Attaching package: 'summarytools'
+
+The following objects are masked from 'package:Hmisc':
+
+    label, label<-
+
+The following object is masked from 'package:tibble':
+
+    view
+
+
+Attaching package: 'rlang'
+
+The following objects are masked from 'package:purrr':
+
+    flatten, flatten_chr, flatten_dbl, flatten_int, flatten_lgl,
+    flatten_raw, invoke, splice
+
+
+Attaching package: 'ggcorrplot'
+
+The following object is masked from 'package:rstatix':
+
+    cor_pmat
+
+Loading required package: viridisLite
+
+Attaching package: 'viridis'
+
+The following object is masked from 'package:scales':
+
+    viridis_pal
+
+
+Attaching package: 'kableExtra'
+
+The following object is masked from 'package:dplyr':
+
+    group_rows
+
+Saved: d_CO2_heatmap.png
+Saved: d_CH4_heatmap.png
+Saved: d_NH3_heatmap.png
+Saved: q_heatmap.png
+Saved: e_CH4_heatmap.png
+Saved: e_NH3_heatmap.png
+`summarise()` has regrouped the output.
+ℹ Summaries were computed grouped by var and analyzer.
+ℹ Output is grouped by var.
+ℹ Use `summarise(.groups = "drop_last")` to silence this message.
+ℹ Use `summarise(.by = c(var, analyzer))` for per-operation grouping
+  (`?dplyr::dplyr_by`) instead.
+There were 26 warnings (use warnings() to see them)
+
+===== v7 module: 02_regression_pairs.R =====
+v7: wrote table -> 02_regression_pairs.csv  (171 rows)
+v7: wrote plot  -> 02_regression_delta_CO2.png
+v7: wrote plot  -> 02_regression_delta_CH4.png
+v7: wrote plot  -> 02_regression_delta_NH3.png
+v7: wrote plot  -> 02_regression_Q_vent.png
+v7: wrote plot  -> 02_regression_e_CH4_ghLU.png
+v7: wrote plot  -> 02_regression_e_NH3_ghLU.png
+v7 module 02 (regression pairs): done.
+
+===== v7 module: 03_lins_ccc.R =====
+v7: wrote table -> 03_lins_ccc.csv  (171 rows)
+v7: wrote plot  -> 03_lins_ccc_lattice.png
+v7 module 03 (Lin's CCC): done.
+
+===== v7 module: 04_bland_altman_relative.R =====
+v7: wrote table -> 04_bland_altman_relative.csv  (171 rows)
+v7: wrote plot  -> 04_BA_relative_lab_ATB.png
+v7: wrote plot  -> 04_BA_relative_lab_LUFA.png
+v7: wrote plot  -> 04_BA_relative_lab_UB.png
+v7 module 04 (relative Bland-Altman): done.
+
+===== v7 module: 05_range_dependence.R =====
+v7: wrote table -> 05_range_dependence.csv  (108 rows)
+v7 module 05 (range dependence): done.
+
+===== v7 module: 06_extended_pcc.R =====
+v7: wrote table -> 06_extended_pcc.csv  (1215 rows)
+v7 module 06 (extended PCC): done.
+
+===== v7 module: 07_ftir2_excluded.R =====
+v7: wrote table -> 07_ftir2_sensitivity_regression.csv  (183 rows)
+v7: wrote table -> 07_ftir2_sensitivity_ccc.csv  (147 rows)
+v7: wrote table -> 07_ftir2_sensitivity_summary.csv  (5 rows)
+v7 module 07 (FTIR.2 excluded sensitivity): done.
+
+===== v7 module: 08_meteo_regression.R =====
+v7: wrote table -> 08_meteo_regression.csv  (108 rows)
+v7 module 08 (multivariate meteo regression): done.
+
+===== v7 module: 09_wind_conditional_ba.R =====
+v7: wrote table -> 09_wind_conditional_BA.csv  (36 rows)
+v7: wrote plot  -> 09_wind_conditional_BA_summary.png
+v7 module 09 (wind-conditional Bland-Altman): done.
+
+===== v7 module: 10_variance_decomposition.R =====
+v7: wrote table -> 10_variance_decomposition.csv  (30 rows)
+v7: wrote plot  -> 10_variance_decomposition.png
+v7 module 10 (variance decomposition): done.
+
+===== v7 module: 11_cross_correlation.R =====
+v7: wrote table -> 11_cross_correlation.csv  (36 rows)
+v7 module 11 (cross-correlation lag): done.
+Warning messages:
+1: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+  Model failed to converge with max|grad| = 0.00321169 (tol = 0.002, component 1)
+  See ?lme4::convergence and ?lme4::troubleshooting.
+2: Removed 4 rows containing missing values or values outside the scale range
+(`geom_col()`). 
+
+All v7 modules complete.
+Tables in: D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis/result_data/tables/Version_7
+Plots  in: D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis/result_data/plots/Version_7
