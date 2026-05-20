@@ -33,6 +33,7 @@ workflows/crds_routine_cleaning/scripts/*
 workflows/ringversuche_analysis/*
 !workflows/ringversuche_analysis/scripts/
 workflows/ringversuche_analysis/scripts/*
+!workflows/ringversuche_analysis/scripts/*.R
 !workflows/ringversuche_analysis/scripts/v7/
 !workflows/ringversuche_analysis/scripts/v7/**
 
