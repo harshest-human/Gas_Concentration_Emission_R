@@ -50,7 +50,7 @@ flush_sec      <- 180
 interval_sec   <- 450
 location_cycle <- c("in", "N", "in", "S")    # 4 * 450 s = 30 min super-cycle
 
-out_version  <- "Version_6"
+out_version  <- "Version_9"
 out_dir      <- file.path(proj_root, "clean_data", out_version)
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 file_stub    <- "20250408-15"
@@ -227,16 +227,15 @@ make_hourly_wide_v5 <- function(df_long, lab_name) {
 
 write_outputs <- function(df_cycle, lab_name, analyzer_name, out_dir, file_stub) {
         gas_cols <- intersect(c("CO2","CH4","NH3","H2O","N2O"), names(df_cycle))
-        # Snap to 7.5-min grid, then run outlier removal per location AND date BEFORE
+        # Snap to 7.5-min grid, then run outlier removal per location BEFORE
         # any hourly aggregation (so a single bad cycle doesn't contaminate
         # the hourly mean).
         cycle_df <- df_cycle %>%
-                mutate(DATE.TIME = round_to_interval(DATE.TIME, interval_sec = 450),
-                       date = as.Date(DATE.TIME))
-        cat(sprintf("  outlier removal (per location & date):\n"))
-        cycle_df <- remove_outliers(cycle_df, group_cols = c("location", "date"))
+                mutate(DATE.TIME = round_to_interval(DATE.TIME, interval_sec = 450))
+        cat(sprintf("  outlier removal (per location):\n"))
+        cycle_df <- remove_outliers(cycle_df, group_cols = c("location"))
         # Replace the input df_cycle for downstream long/wide builders
-        df_cycle <- cycle_df %>% select(-date)
+        df_cycle <- cycle_df
 
         cycle_out <- df_cycle %>%
                 mutate(lab = lab_name, analyzer = analyzer_name) %>%
@@ -353,7 +352,7 @@ if (length(aneco_files) > 0) {
 
   aneco_cycle <- cycle_average_by_time(aneco_sec, start_time, end_time,
                                        flush_sec, interval_sec, location_cycle)
-  write_outputs(aneco_cycle, "ANECO", "FTIR.4", out_dir, file_stub)
+  write_outputs(aneco_cycle, "ANECO", "FTIR.4_old", out_dir, file_stub)
 } else {
   cat("  WARN: No daily ANECO RESULTS files (RESULTS_DDMMYY.TXT) found. Skipping FTIR.4.\n")
 }
@@ -386,7 +385,7 @@ if (file.exists(aneco_v2_path)) {
 
   aneco_v2_cycle <- cycle_average_by_time(aneco_v2_sec, start_time, end_time,
                                           flush_sec, interval_sec, location_cycle)
-  write_outputs(aneco_v2_cycle, "ANECO", "FTIR.4_v2", out_dir, file_stub)
+  write_outputs(aneco_v2_cycle, "ANECO", "FTIR.4", out_dir, file_stub)
 } else {
   cat(sprintf("  WARN: file not found: %s\n", basename(aneco_v2_path)))
 }

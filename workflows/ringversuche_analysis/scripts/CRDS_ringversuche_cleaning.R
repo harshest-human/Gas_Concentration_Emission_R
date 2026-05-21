@@ -66,7 +66,7 @@ flush_sec    <- 180
 interval_sec <- 450
 gases        <- c("CO2", "CH4", "NH3", "H2O", "N2O")
 
-out_version  <- "Version_6"
+out_version  <- "Version_9"
 out_dir      <- file.path(proj_root, "clean_data", out_version)
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 

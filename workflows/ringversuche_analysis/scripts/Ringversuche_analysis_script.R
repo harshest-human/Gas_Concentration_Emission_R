@@ -3,7 +3,8 @@ library(tidyverse)   # ggplot2, dplyr, tidyr, stringr, purrr, readr, tibble
 library(lubridate)   # date-time parsing
 library(scales)      # axis breaks and number formatting
 library(patchwork)   # wrap_plots()
-# Hmisc is used via Hmisc::rcorr() inside emicorrgram() and need not be attached.
+library(dplyr)       # for %>% and data manipulation
+# DescTools is used via DescTools::CCC() for Lin's concordance and need not be attached.
 
 #### Shared configuration                       ####
 # Variable labels (plotmath)
@@ -30,7 +31,7 @@ VAR_LABELS_UNITS <- c(
         "ws_trv"      = "Wind~Speed~Traverse~(m~s^-1)",
         "n_dairycows" = "'Number of Cows'"
 )
-# Without units - used by correlograms and percent-error plots.
+# Without units - used by percent-error plots.
 VAR_LABELS_PLAIN <- c(
         "CO2_mgm3"    = "c[CO2]",
         "CH4_mgm3"    = "c[CH4]",
@@ -53,15 +54,25 @@ VAR_LABELS_PLAIN <- c(
         "ws_trv"      = "Wind~Speed~Traverse",
         "n_dairycows" = "'Number of Cows'"
 )
-# Analyzer aesthetics 
+# Location labels (plotmath) - superscript compass for the two backgrounds
+LOC_LABELS <- c(
+        "Indoor"     = "Indoor",
+        "Outdoor_NE" = "Outdoor^NE",
+        "Outdoor_SW" = "Outdoor^SW"
+)
+# Maps the _in/_N/_S column suffix to the renamed location labels
+loc_from_suffix <- c("in" = "Indoor", "N" = "Outdoor_NE", "S" = "Outdoor_SW")
+
+# Analyzer aesthetics. FTIR.4 = new spectral library (canonical);
+# FTIR.4_old = superseded library run, drawn in red and dropped after Section 9.
 ANALYZER_COLORS <- c(
         "FTIR.1" = "#1b9e77", "FTIR.2" = "#d95f02", "FTIR.3" = "#7570b3",
-        "FTIR.4" = "#e7298a", "FTIR.4_v2" = "#c71c6d",
+        "FTIR.4" = "#e7298a", "FTIR.4_old" = "#e41a1c",
         "CRDS.1" = "#66a61e", "CRDS.2" = "#e6ab02", "CRDS.3" = "#a6761d",
         "baseline" = "black"
 )
 ANALYZER_SHAPES <- c(
-        "FTIR.1" = 0, "FTIR.2" = 1, "FTIR.3" = 2, "FTIR.4" = 5, "FTIR.4_v2" = 5,
+        "FTIR.1" = 0, "FTIR.2" = 1, "FTIR.3" = 2, "FTIR.4" = 5, "FTIR.4_old" = 13,
         "CRDS.1" = 15, "CRDS.2" = 19, "CRDS.3" = 17, "baseline" = 4
 )
 # Expand a lookup so every analyzer present in `x` has a value, filling
@@ -162,9 +173,9 @@ reshaper <- function(df) {
                 ) %>%
                 mutate(
                         location = case_when(
-                                str_detect(var, "_in$") ~ "Barn inside",
-                                str_detect(var, "_N$")  ~ "North background",
-                                str_detect(var, "_S$")  ~ "South background",
+                                str_detect(var, "_in$") ~ "Indoor",
+                                str_detect(var, "_N$")  ~ "Outdoor_NE",
+                                str_detect(var, "_S$")  ~ "Outdoor_SW",
                                 TRUE ~ NA_character_
                         ),
                         var = str_remove(var, "_(in|N|S)$"),
@@ -195,12 +206,47 @@ reshaper <- function(df) {
 
         df_long <- bind_rows(df_long, baseline_df) %>%
                 mutate(analyzer = factor(analyzer,
-                                         levels = c("FTIR.1","FTIR.2","FTIR.3","FTIR.4","FTIR.4_v2",
+                                         levels = c("FTIR.1","FTIR.2","FTIR.3","FTIR.4","FTIR.4_old",
                                                     "CRDS.1","CRDS.2","CRDS.3",
                                                     "HOBO","USA","RGB","baseline"))) %>%
                 arrange(DATE.TIME, location, var)
 
         return(df_long)
+}
+
+#### Statistics helper functions                ####
+# 8-point compass sector from wind direction (degrees)
+deg_to_compass8 <- function(deg) {
+        labs <- c("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+        factor(labs[floor(((deg %% 360) + 22.5) / 45) %% 8 + 1], levels = labs)
+}
+
+# Deming regression (orthogonal fit, equal error variance lambda = 1)
+deming_fit <- function(x, y) {
+        ok <- complete.cases(x, y); x <- x[ok]; y <- y[ok]
+        sxx <- var(x); syy <- var(y); sxy <- cov(x, y)
+        slope <- (syy - sxx + sqrt((syy - sxx)^2 + 4 * sxy^2)) / (2 * sxy)
+        c(intercept = mean(y) - slope * mean(x), slope = slope)
+}
+
+# Relative Bland-Altman statistics (v7 logic, Bland & Altman 1999):
+# differences expressed as % of the pair mean, with 95% CIs on bias.
+ba_relative_stats <- function(x, y) {
+        ok <- is.finite(x) & is.finite(y) & ((x + y) != 0)
+        x <- x[ok]; y <- y[ok]; n <- length(x)
+        if (n < 5L) return(NULL)
+        d     <- 100 * (y - x) / ((x + y) / 2)
+        bias  <- mean(d); sd_d <- sd(d)
+        se_b  <- sd_d / sqrt(n)
+        tibble(
+                n         = n,
+                bias_pct  = bias,
+                bias_lo95 = bias - 1.96 * se_b,
+                bias_hi95 = bias + 1.96 * se_b,
+                loa_low   = bias - 1.96 * sd_d,
+                loa_high  = bias + 1.96 * sd_d,
+                sd_pct    = sd_d
+        )
 }
 
 #### Plotting functions                         ####
@@ -265,7 +311,7 @@ emitrendplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALS
                 facet_grid(facet_label ~ location, scales = "free_y", switch = "y",
                            labeller = labeller(
                                    facet_label = label_parsed,
-                                   location = label_value
+                                   location = as_labeller(LOC_LABELS, label_parsed)
                            )) +
                 scale_y_continuous(
                         breaks = scales::pretty_breaks(n = 6),
@@ -298,87 +344,8 @@ emitrendplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALS
         return(p)
 }
 
-# emicorrgram(): pairwise Pearson correlation between analyzers, per variable x location
-emicorrgram <- function(data, target_variables, locations = NULL) {
-        # Helper: correlation matrix for one variable & location
-        compute_corr <- function(var_sel, loc_sel) {
-                filtered <- data %>%
-                        filter(var == var_sel) %>%
-                        select(DATE.TIME, location, analyzer, value)
-
-                if (!is.null(loc_sel)) {
-                        filtered <- filtered %>% filter(location %in% loc_sel)
-                }
-
-                filtered <- filtered %>%
-                        group_by(DATE.TIME, location, analyzer) %>%
-                        summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
-
-                pivoted <- filtered %>%
-                        pivot_wider(names_from = analyzer, values_from = value,
-                                    values_fn = function(x, ...) mean(x, na.rm = TRUE))
-
-                subdata_num <- pivoted %>%
-                        select(-DATE.TIME, -location) %>%
-                        mutate(across(everything(), as.numeric))
-
-                if (ncol(subdata_num) < 2) return(NULL)
-
-                cor_res <- Hmisc::rcorr(as.matrix(subdata_num), type = "pearson")
-
-                expand.grid(
-                        Var1 = colnames(cor_res$r),
-                        Var2 = colnames(cor_res$r),
-                        stringsAsFactors = FALSE
-                ) %>%
-                        mutate(
-                                correlation = as.vector(cor_res$r),
-                                pvalue = as.vector(cor_res$P),
-                                target_variable = var_sel,
-                                location = loc_sel
-                        ) %>%
-                        filter(as.numeric(factor(Var1)) > as.numeric(factor(Var2)))
-        }
-
-        # Loop over variables and locations
-        corr_df <- map_df(target_variables, function(tv) {
-                map_df(locations, function(loc) compute_corr(tv, loc))
-        }) %>%
-                mutate(facet_label = factor(VAR_LABELS_PLAIN[target_variable],
-                                            levels = VAR_LABELS_PLAIN[target_variables]))
-
-        # Plot
-        p <- ggplot(corr_df, aes(x = Var1, y = Var2, fill = correlation)) +
-                geom_tile(color = "white") +
-                geom_text(aes(label = paste0(
-                        round(correlation, 2),
-                        ifelse(pvalue <= 0.001, "\n***",
-                               ifelse(pvalue <= 0.01, "\n**",
-                                      ifelse(pvalue <= 0.05, "\n*", "\nns")))
-                )), size = 3, color = "white") +
-                scale_y_discrete(position = "right") +
-                scale_fill_gradientn(
-                        colors = c("darkred","red","orange2","gold2","yellow",
-                                   "greenyellow","green1","green3","darkgreen"),
-                        limits = c(0,1),
-                        name = "PCC"
-                ) +
-                facet_grid(location ~ facet_label, scales = "free", space = "free", switch = "y",
-                           labeller = labeller(facet_label = label_parsed)) +
-                theme_classic() +
-                theme(
-                        axis.title = element_blank(),
-                        axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-                        axis.text.y = element_text(angle = 45, hjust = 1, size = 10),
-                        legend.position = "bottom",
-                        strip.text = element_text(size = 12),
-                        panel.border = element_rect(colour = "black", fill = NA)
-                )
-
-        return(p)
-}
-
-# emiboxplot(): distribution per analyzer, faceted by variable x location (IQR outliers removed)
+# emiboxplot(): distribution per analyzer, faceted by variable x location.
+# Boxes are drawn as coloured outlines (no fill) over coloured jittered points.
 emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE) {
         if (!is.null(location_filter)) {
                 data <- data %>% filter(location %in% location_filter)
@@ -409,16 +376,16 @@ emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE)
         data <- data %>%
                 mutate(variable_label = factor(labels[as.character(var)], levels = labels[y]))
 
-        fill_vals <- analyzer_aes(data$analyzer, ANALYZER_COLORS, "black")
+        col_vals <- analyzer_aes(data$analyzer, ANALYZER_COLORS, "black")
 
-        p <- ggplot(data, aes(x = analyzer, y = .data[[value_col]], fill = analyzer)) +
-                geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+        p <- ggplot(data, aes(x = analyzer, y = .data[[value_col]], color = analyzer)) +
+                geom_boxplot(outlier.shape = NA, fill = NA, linewidth = 0.6) +
                 geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
-                scale_fill_manual(values = fill_vals) +
+                scale_color_manual(values = col_vals) +
                 facet_grid(variable_label ~ location, scales = "free_y", switch = "y",
                            labeller = labeller(
                                    variable_label = label_parsed,
-                                   location = label_value
+                                   location = as_labeller(LOC_LABELS, label_parsed)
                            )) +
                 scale_y_continuous(
                         breaks = scales::pretty_breaks(n = 5),
@@ -437,21 +404,21 @@ emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE)
                         legend.title = element_blank(),
                         plot.title = element_text(hjust = 0.5)
                 ) +
-                guides(fill = guide_legend(nrow = 1))
+                guides(color = guide_legend(nrow = 1))
 
         return(p)
 }
 
-# bland_altman_plot(): agreement between a pair of analyzers for one variable
+# bland_altman_plot(): RELATIVE Bland-Altman (% of pair mean) for an analyzer
+# pair and one variable. Relative scale keeps the limits of agreement
+# comparable across the wide concentration range (v7 module 04 logic).
 bland_altman_plot <- function(data, var_filter, analyzer_pair, location_filter = NULL, x = "DATE.TIME") {
         var_label_expr <- parse(text = VAR_LABELS_UNITS[[var_filter]])[[1]]
 
         df <- data %>% filter(var == var_filter)
-
         if (!is.null(location_filter)) {
                 df <- df %>% filter(location %in% location_filter)
         }
-
         df <- df %>% filter(analyzer %in% analyzer_pair)
 
         df_wide <- df %>%
@@ -463,61 +430,60 @@ bland_altman_plot <- function(data, var_filter, analyzer_pair, location_filter =
 
         df_ba <- df_wide %>%
                 mutate(
-                        mean_val = ( .data[[a1]] + .data[[a2]] ) / 2,
-                        diff_val = .data[[a1]] - .data[[a2]]
-                )
+                        mean_val = (.data[[a1]] + .data[[a2]]) / 2,
+                        diff_pct = 100 * (.data[[a2]] - .data[[a1]]) / mean_val
+                ) %>%
+                filter(is.finite(diff_pct))
 
-        bias      <- mean(df_ba$diff_val, na.rm = TRUE)
-        sd_diff   <- sd(df_ba$diff_val, na.rm = TRUE)
-        loa_upper <- bias + 1.96 * sd_diff
-        loa_lower <- bias - 1.96 * sd_diff
+        bias   <- mean(df_ba$diff_pct, na.rm = TRUE)
+        sd_d   <- sd(df_ba$diff_pct, na.rm = TRUE)
+        loa_hi <- bias + 1.96 * sd_d
+        loa_lo <- bias - 1.96 * sd_d
 
         subtitle_expr <- if (!is.null(location_filter)) {
-                bquote(.(var_label_expr) ~ "|" ~ .(location_filter))
+                loc_expr <- parse(text = LOC_LABELS[location_filter])[[1]]
+                bquote(.(var_label_expr) ~ "|" ~ .(loc_expr))
         } else {
                 var_label_expr
         }
 
-        p <- ggplot(df_ba, aes(x = mean_val, y = diff_val)) +
-                geom_point(alpha = 0.6) +
-                geom_hline(yintercept = bias,      color = "blue", linetype = "dashed", linewidth = 1) +
-                geom_hline(yintercept = loa_upper, color = "red",  linetype = "dotted", linewidth = 1) +
-                geom_hline(yintercept = loa_lower, color = "red",  linetype = "dotted", linewidth = 1) +
-                scale_x_continuous(
-                        breaks = pretty_breaks(n = 8),
-                        labels = scales::label_number(accuracy = 0.1)
-                ) +
-                scale_y_continuous(
-                        breaks = pretty_breaks(n = 8),
-                        labels = scales::label_number(accuracy = 0.1)
-                ) +
+        ggplot(df_ba, aes(x = mean_val, y = diff_pct)) +
+                geom_point(alpha = 0.5, size = 1) +
+                geom_hline(yintercept = 0, color = "grey60") +
+                geom_hline(yintercept = bias,   color = "blue", linetype = "dashed", linewidth = 0.9) +
+                geom_hline(yintercept = loa_hi, color = "red",  linetype = "dotted", linewidth = 0.9) +
+                geom_hline(yintercept = loa_lo, color = "red",  linetype = "dotted", linewidth = 0.9) +
+                annotate("text", x = Inf, y = bias, hjust = 1.05, vjust = -0.4, size = 3,
+                         label = sprintf("bias = %.1f%%", bias)) +
+                scale_x_continuous(breaks = pretty_breaks(n = 6),
+                                   labels = scales::label_number(accuracy = 0.1)) +
                 labs(
                         subtitle = subtitle_expr,
                         x = bquote("Mean of" ~ .(a1) ~ "and" ~ .(a2)),
-                        y = bquote("Difference (" ~ .(a1) - .(a2) ~ ")")
+                        y = bquote("Relative difference (" ~ .(a2) - .(a1) ~ ") %")
                 ) +
                 theme_classic() +
                 theme(
                         plot.subtitle = element_text(hjust = 0.5),
                         plot.title = element_text(hjust = 0.5)
                 )
-
-        return(p)
 }
 
 #### 1. Paths and time range                    ####
 base_dir   <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
-data_dir   <- file.path(base_dir, "clean_data/Version_6/long_format")
+data_dir   <- file.path(base_dir, "clean_data/Version_9/long_format")
 meta_dir   <- file.path(base_dir, "meta_data")
-tables_dir <- file.path(base_dir, "result_data/tables/Version_6")
-plots_dir  <- file.path(base_dir, "result_data/plots/Version_6")
+tables_dir <- file.path(base_dir, "result_data/tables/Version_9")
+plots_dir  <- file.path(base_dir, "result_data/plots/Version_9")
 dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(plots_dir, showWarnings = FALSE, recursive = TRUE)
 
 start_time <- as.POSIXct("2025-04-08 12:00:00", tz = "UTC")
 end_time   <- as.POSIXct("2025-04-14 12:00:00", tz = "UTC")
 
-#### 2. Read & merge gas datasets###
+gases <- c("CO2", "CH4", "NH3")
+
+#### 2. Read & merge gas datasets               ####
 gas_files <- list.files(data_dir, pattern = "\\.csv$", full.names = TRUE)
 
 gas_data <- map_dfr(gas_files, read.csv, stringsAsFactors = FALSE) %>%
@@ -559,7 +525,7 @@ wind_data <- read.csv(file.path(meta_dir, "USA_mast_wind/20240101_20250825_USA_m
         rename(wd_mst = wd, ws_mst = ws) %>%
         select(DATE.TIME, wd_mst, ws_mst)
 
-#### 4. Combine all input paramters             ####
+#### 4. Combine all input parameters            ####
 input_combined <- gas_data %>%
         left_join(animal_data, by = "DATE.TIME") %>%
         left_join(T_RH_HOBO,   by = "DATE.TIME") %>%
@@ -569,7 +535,7 @@ input_combined <- gas_data %>%
 #### 5. Emissions per (lab, analyzer)           ####
 emission_result <- indirect.CO2.balance(input_combined)
 #### 6. Emissions reshaped                      ####
-emission_reshaped <-  reshaper(emission_result) %>%
+emission_reshaped <- reshaper(emission_result) %>%
         mutate(across(where(is.numeric), ~ round(.x, 2)))
 
 #### 7. Write csv tables                        ####
@@ -577,26 +543,106 @@ write_excel_csv(input_combined,  file.path(tables_dir, "20250408-15_input_combin
 write_excel_csv(emission_result, file.path(tables_dir, "20250408-15_emission_result.csv"))
 write_excel_csv(emission_reshaped, file.path(tables_dir, "20250408-15_ringversuche_emission_reshaped.csv"))
 
-#### 8. Boxplots and time series                ####
-# Concentration, delta and ventilation/emission plots - all saved at a common 12 x 8 in
+#### 8. Absolute concentration plots (incl. FTIR.4_old) ####
+# Plotted FIRST, with FTIR.4_old still in, so the old vs new spectral-library
+# difference is visible before it is dropped from the rest of the analysis.
+c_trend_plot <- emitrendplot(emission_reshaped, y = c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3"))
+c_boxplot    <- emiboxplot(emission_reshaped,   y = c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3"))
+ggsave(file.path(plots_dir, "c_trend_plot.png"), c_trend_plot, width = 12, height = 8, dpi = 300)
+ggsave(file.path(plots_dir, "c_boxplot.png"),    c_boxplot,    width = 12, height = 8, dpi = 300)
+
+#### 9. FTIR.4 vs FTIR.4_old (spectral-library check) ####
+# Justifies dropping FTIR.4_old: the two are the SAME instrument, FTIR.4_old
+# evaluated with the superseded spectral library, FTIR.4 re-evaluated from the
+# spectra with the corrected library. Fully paired (identical timestamps).
+ftir_old <- input_combined %>% filter(analyzer == "FTIR.4_old")
+ftir_new <- input_combined %>% filter(analyzer == "FTIR.4")
+
+# Paired FTIR.4_old (v_old) vs FTIR.4 (v_new) values for one gas x location
+lib_pair <- function(g, l) {
+        col <- paste0(g, "_ppm_", l)
+        inner_join(
+                tibble(DATE.TIME = ftir_old$DATE.TIME, v_old = ftir_old[[col]]),
+                tibble(DATE.TIME = ftir_new$DATE.TIME, v_new = ftir_new[[col]]),
+                by = "DATE.TIME") %>%
+                filter(complete.cases(v_old, v_new))
+}
+
+lib_compare <- map_dfr(gases, function(g) {
+        map_dfr(c("in", "N", "S"), function(l) {
+                j <- lib_pair(g, l)
+                if (nrow(j) < 3) return(NULL)
+                dem <- deming_fit(j$v_old, j$v_new)
+                tibble(
+                        gas       = g,
+                        location  = unname(loc_from_suffix[l]),
+                        n         = nrow(j),
+                        mean_old  = mean(j$v_old),
+                        mean_new  = mean(j$v_new),
+                        mean_diff = mean(j$v_new - j$v_old),
+                        RPD_pct   = 100 * mean(j$v_new - j$v_old) / mean((j$v_old + j$v_new) / 2),
+                        RMSD      = sqrt(mean((j$v_new - j$v_old)^2)),
+                        deming_intercept = unname(dem["intercept"]),
+                        deming_slope     = unname(dem["slope"]),
+                        CCC       = DescTools::CCC(j$v_old, j$v_new)$rho.c[, "est"],
+                        p_wilcox  = suppressWarnings(
+                                wilcox.test(j$v_old, j$v_new, paired = TRUE)$p.value)
+                )
+        })
+})
+write_excel_csv(lib_compare, file.path(tables_dir, "FTIR4_old_vs_new_comparison.csv"))
+
+lib_points <- map_dfr(gases, function(g) {
+        map_dfr(c("in", "N", "S"), function(l) {
+                lib_pair(g, l) %>% mutate(gas = g, location = unname(loc_from_suffix[l]))
+        })
+})
+
+lib_plot <- ggplot(lib_points, aes(x = v_old, y = v_new)) +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey50") +
+        geom_point(alpha = 0.5, size = 1) +
+        geom_abline(data = lib_compare,
+                    aes(slope = deming_slope, intercept = deming_intercept),
+                    color = "#e41a1c", linewidth = 0.7) +
+        facet_grid(gas ~ location, scales = "free") +
+        labs(title = "FTIR.4_old vs FTIR.4 after spectral-library correction",
+             subtitle = "Dashed grey = 1:1 line; red = Deming regression",
+             x = "FTIR.4_old (ppm)", y = "FTIR.4 (ppm)") +
+        theme_bw(base_size = 12)
+ggsave(file.path(plots_dir, "FTIR4_old_vs_new_scatter.png"), lib_plot,
+       width = 11, height = 9, dpi = 300, bg = "white")
+
+#### 10. Drop FTIR.4_old from all further analysis ####
+# FTIR.4_old (old spectral library) showed large, systematic errors against
+# its own re-evaluation FTIR.4 (see Section 9: CO2 ~ -6 to -7 %, CH4/NH3
+# off by > 80 %). The deviation is a library artefact, not a real measurement
+# difference, so FTIR.4 (corrected library) is kept and FTIR.4_old is dropped
+# from every plot and statistic below. Datasets are rebuilt without it so the
+# baseline mean is also recomputed cleanly.
+emission_result_v <- emission_result %>% filter(analyzer != "FTIR.4_old")
+emission_reshaped_v <- reshaper(emission_result_v) %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        mutate(analyzer = fct_drop(analyzer))
+input_combined_v <- input_combined %>% filter(analyzer != "FTIR.4_old")
+analyzers <- sort(unique(input_combined_v$analyzer))
+
+#### 11. Delta, ventilation and emission plots (no FTIR.4_old) ####
 all_plots <- list(
-        c_trend_plot   = emitrendplot(emission_reshaped, y = c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3")),
-        c_boxplot      = emiboxplot(emission_reshaped,   y = c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3")),
-        d_trend_plot   = emitrendplot(emission_reshaped, y = c("delta_CO2", "delta_CH4", "delta_NH3")),
-        d_boxplot      = emiboxplot(emission_reshaped,   y = c("delta_CO2", "delta_CH4", "delta_NH3")),
-        q_e_trend_plot = emitrendplot(emission_reshaped, y = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU")),
-        q_e_boxplot    = emiboxplot(emission_reshaped,   y = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"))
+        d_trend_plot   = emitrendplot(emission_reshaped_v, y = c("delta_CO2", "delta_CH4", "delta_NH3")),
+        d_boxplot      = emiboxplot(emission_reshaped_v,   y = c("delta_CO2", "delta_CH4", "delta_NH3")),
+        q_e_trend_plot = emitrendplot(emission_reshaped_v, y = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU")),
+        q_e_boxplot    = emiboxplot(emission_reshaped_v,   y = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"))
 )
 iwalk(all_plots, function(p, nm) {
         ggsave(file.path(plots_dir, paste0(nm, ".png")), p, width = 12, height = 8, dpi = 300)
 })
 
-#### 9. Bland-Altman plots                      ####
-# Save one row of Bland-Altman panels per analyzer pair:
+#### 12. Relative Bland-Altman plots (no FTIR.4_old) ####
+# One row of relative Bland-Altman panels per lab-internal analyzer pair.
 save_bland_altman <- function(analyzer_pair, tag) {
-        locs <- c("North background", "South background")
+        locs <- c("Outdoor_NE", "Outdoor_SW")
         mk <- function(v, loc) {
-                bland_altman_plot(emission_reshaped, var_filter = v,
+                bland_altman_plot(emission_reshaped_v, var_filter = v,
                                   analyzer_pair = analyzer_pair, location_filter = loc) +
                         theme(plot.margin = margin(10, 10, 10, 10))
         }
@@ -619,17 +665,212 @@ save_bland_altman <- function(analyzer_pair, tag) {
 save_bland_altman(c("FTIR.1", "CRDS.1"), "AnalyzerA")
 save_bland_altman(c("FTIR.2", "CRDS.2"), "AnalyzerB")
 
-#### 10. Correlograms                           ####
-d_corrgram <- emicorrgram(emission_reshaped,
-                          target_variables = c("delta_CO2", "delta_CH4", "delta_NH3"),
-                          locations = c("North background", "South background"))
+# Numeric relative Bland-Altman table for the same pairs
+ba_pairs <- list(AnalyzerA = c("FTIR.1", "CRDS.1"),
+                 AnalyzerB = c("FTIR.2", "CRDS.2"))
+ba_vars  <- c("e_CH4_ghLU", "e_NH3_ghLU", "Q_vent")
+ba_table <- map_dfr(names(ba_pairs), function(tag) {
+        pr <- ba_pairs[[tag]]
+        map_dfr(ba_vars, function(v) {
+                map_dfr(c("Outdoor_NE", "Outdoor_SW"), function(loc) {
+                        w <- emission_reshaped_v %>%
+                                filter(var == v, location == loc, analyzer %in% pr) %>%
+                                select(DATE.TIME, analyzer, value) %>%
+                                pivot_wider(names_from = analyzer, values_from = value)
+                        st <- ba_relative_stats(w[[pr[1]]], w[[pr[2]]])
+                        if (is.null(st)) return(NULL)
+                        bind_cols(tibble(pair = tag, variable = v, location = loc), st)
+                })
+        })
+})
+write_excel_csv(ba_table, file.path(tables_dir, "bland_altman_relative.csv"))
 
-q_e_corrgram <- emicorrgram(emission_reshaped,
-                            target_variables = c("e_CH4_ghLU", "e_NH3_ghLU", "Q_vent"),
-                            locations = c("North background", "South background"))
+#### 13. Pairwise method comparison: regression + Lin's CCC (no FTIR.4_old) ####
+# For every analyzer pair, regress and score agreement on absolute
+# concentrations. Lin's CCC captures correlation AND bias in one number,
+# so it replaces the old Pearson correlogram.
+pairwise_compare <- function(df_long, var_sel, loc_sel) {
+        w <- df_long %>%
+                filter(var == var_sel, location == loc_sel,
+                       !analyzer %in% c("baseline", "HOBO", "USA", "RGB")) %>%
+                select(DATE.TIME, analyzer, value) %>%
+                mutate(analyzer = as.character(analyzer)) %>%
+                pivot_wider(names_from = analyzer, values_from = value,
+                            values_fn = ~ mean(.x, na.rm = TRUE))
+        ana <- setdiff(names(w), "DATE.TIME")
+        if (length(ana) < 2) return(NULL)
+        map_dfr(combn(ana, 2, simplify = FALSE), function(pr) {
+                x <- w[[pr[1]]]; y <- w[[pr[2]]]
+                ok <- complete.cases(x, y); x <- x[ok]; y <- y[ok]
+                if (length(x) < 5) return(NULL)
+                dem <- deming_fit(x, y)
+                tibble(
+                        var = var_sel, location = loc_sel,
+                        analyzer_x = pr[1], analyzer_y = pr[2], n = length(x),
+                        pearson_r        = cor(x, y),
+                        ccc              = DescTools::CCC(x, y)$rho.c[, "est"],
+                        deming_slope     = unname(dem["slope"]),
+                        deming_intercept = unname(dem["intercept"])
+                )
+        })
+}
 
-ggsave(file.path(plots_dir, "d_corrgram.png"), plot = d_corrgram,
-       width = 10, height = 6, units = "in", dpi = 300)
+conc_vars <- c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3")
+conc_locs <- c("Indoor", "Outdoor_NE", "Outdoor_SW")
+pairwise_tbl <- map_dfr(conc_vars, function(v) {
+        map_dfr(conc_locs, function(l) pairwise_compare(emission_reshaped_v, v, l))
+})
+write_excel_csv(pairwise_tbl, file.path(tables_dir, "pairwise_regression_ccc.csv"))
 
-ggsave(file.path(plots_dir, "q_e_corrgram.png"), plot = q_e_corrgram,
-       width = 10, height = 6, units = "in", dpi = 300)
+# CCC heatmap (analyzer x analyzer), faceted by gas x location - the CCC
+# equivalent of the dropped correlogram.
+ccc_plot <- pairwise_tbl %>%
+        mutate(facet_label = factor(VAR_LABELS_PLAIN[var], levels = VAR_LABELS_PLAIN[conc_vars])) %>%
+        ggplot(aes(x = analyzer_x, y = analyzer_y, fill = ccc)) +
+        geom_tile(color = "white") +
+        geom_text(aes(label = sprintf("%.2f", ccc)), size = 2.6) +
+        scale_fill_gradient2(low = "#b2182b", mid = "#f7f7f7", high = "#2166ac",
+                             midpoint = 0.5, limits = c(0, 1), name = "Lin's CCC") +
+        facet_grid(location ~ facet_label,
+                   labeller = labeller(facet_label = label_parsed,
+                                       location = as_labeller(LOC_LABELS, label_parsed))) +
+        labs(title = "Pairwise agreement (Lin's concordance correlation)",
+             x = NULL, y = NULL) +
+        theme_bw(base_size = 11) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              legend.position = "bottom")
+ggsave(file.path(plots_dir, "pairwise_ccc_heatmap.png"), ccc_plot,
+       width = 12, height = 9, dpi = 300, bg = "white")
+
+#### 14. Wind-sector and wind-speed analysis (no FTIR.4_old) ####
+# Long format: analyzer x timestamp x gas x location, with wind sector + speed.
+ws_long <- input_combined_v %>%
+        filter(!is.na(wd_mst), !is.na(ws_mst)) %>%
+        mutate(wind_sector = deg_to_compass8(wd_mst),
+               speed_class = cut_number(ws_mst, 4)) %>%
+        select(DATE.TIME, analyzer, wind_sector, speed_class,
+               matches("^(CO2|CH4|NH3)_ppm_(in|N|S)$")) %>%
+        pivot_longer(cols = matches("_ppm_"),
+                     names_to = c("gas", "loc"), names_pattern = "(.+)_ppm_(.+)",
+                     values_to = "ppm") %>%
+        mutate(location = unname(loc_from_suffix[loc]),
+               gas      = factor(gas, levels = gases))
+
+# Campaign-average concentration per analyzer x gas x location x wind sector
+ws_summary <- ws_long %>%
+        group_by(analyzer, gas, location, wind_sector) %>%
+        summarise(mean_ppm = mean(ppm, na.rm = TRUE), n = n(), .groups = "drop")
+write_excel_csv(ws_summary, file.path(tables_dir, "wind_sector_concentration.csv"))
+
+# Wind rose - campaign wind-sector frequency (one count per timestamp)
+wind_rose <- input_combined_v %>%
+        distinct(DATE.TIME, wd_mst) %>%
+        filter(!is.na(wd_mst)) %>%
+        mutate(wind_sector = deg_to_compass8(wd_mst)) %>%
+        count(wind_sector, .drop = FALSE) %>%
+        ggplot(aes(x = wind_sector, y = n)) +
+        geom_col(fill = "#377EB8", color = "black", width = 1) +
+        geom_text(aes(label = n), vjust = -0.3, size = 3.5) +
+        coord_polar(start = -pi / 8) +
+        labs(title = "Campaign wind-sector frequency", x = NULL, y = "Timestamps") +
+        theme_minimal(base_size = 13)
+ggsave(file.path(plots_dir, "wind_rose.png"), wind_rose,
+       width = 6, height = 6, dpi = 300, bg = "white")
+
+# Mean concentration by wind sector, faceted gas (rows) x analyzer (cols)
+ws_plot <- ggplot(ws_summary, aes(x = wind_sector, y = mean_ppm, fill = location)) +
+        geom_col(position = position_dodge(width = 0.8), width = 0.7,
+                 color = "black", linewidth = 0.2) +
+        facet_grid(gas ~ analyzer, scales = "free_y") +
+        scale_fill_manual(values = c("Indoor"     = "#4DAF4A",
+                                     "Outdoor_NE" = "#377EB8",
+                                     "Outdoor_SW" = "#E41A1C")) +
+        labs(title = "Average gas concentration by wind sector and analyzer",
+             x = "Wind sector", y = "Mean concentration (ppm)") +
+        theme_bw(base_size = 12) +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+              legend.position = "bottom", legend.title = element_blank())
+ggsave(file.path(plots_dir, "wind_sector_concentration.png"), ws_plot,
+       width = 22, height = 9, dpi = 300, bg = "white")
+
+# Bivariate polar plot: wind direction (angle) x wind-speed class (radius),
+# fill = mean concentration. Reveals whether highs are direction-driven
+# (advected source) or low-speed-driven (local accumulation). One plot per
+# gas (own colour scale), faceted by location, averaged over analyzers.
+ws_speed_summary <- ws_long %>%
+        group_by(gas, location, wind_sector, speed_class) %>%
+        summarise(mean_ppm = mean(ppm, na.rm = TRUE), n = n(), .groups = "drop")
+write_excel_csv(ws_speed_summary, file.path(tables_dir, "wind_sector_speed_concentration.csv"))
+
+make_polar <- function(g) {
+        ggplot(filter(ws_speed_summary, gas == g),
+               aes(x = wind_sector, y = speed_class, fill = mean_ppm)) +
+                geom_tile(color = "white") +
+                coord_polar(start = -pi / 8) +
+                facet_wrap(~ location) +
+                scale_fill_viridis_c(name = paste0(g, " (ppm)"), option = "C") +
+                labs(title = g, x = NULL, y = "Wind-speed class (m/s)") +
+                theme_minimal(base_size = 11) +
+                theme(axis.text.x = element_text(size = 8),
+                      legend.position = "right")
+}
+polar_fig <- wrap_plots(lapply(gases, make_polar), ncol = 1)
+ggsave(file.path(plots_dir, "wind_direction_speed_polar.png"), polar_fig,
+       width = 12, height = 15, dpi = 300, bg = "white")
+
+#### 15. Outdoor_NE vs Outdoor_SW comparison (no FTIR.4_old) ####
+# Paired comparison (same analyzer & timestamp) for each gas x analyzer.
+ne_sw_tests <- map_dfr(gases, function(g) {
+        map_dfr(as.character(analyzers), function(a) {
+                d  <- input_combined_v %>% filter(analyzer == a)
+                ne <- d[[paste0(g, "_ppm_N")]]
+                sw <- d[[paste0(g, "_ppm_S")]]
+                ok <- complete.cases(ne, sw)
+                ne <- ne[ok]; sw <- sw[ok]
+                if (length(ne) < 3) return(NULL)
+                tibble(
+                        gas       = g,
+                        analyzer  = a,
+                        n         = length(ne),
+                        mean_NE   = mean(ne),
+                        mean_SW   = mean(sw),
+                        mean_diff = mean(ne - sw),
+                        RPD_pct   = 100 * mean(ne - sw) / mean((ne + sw) / 2),
+                        p_ttest   = t.test(ne, sw, paired = TRUE)$p.value,
+                        p_wilcox  = suppressWarnings(
+                                wilcox.test(ne, sw, paired = TRUE)$p.value)
+                )
+        })
+}) %>%
+        mutate(p_wilcox_holm = p.adjust(p_wilcox, method = "holm"),
+               significant   = ifelse(p_wilcox_holm < 0.05, "yes", "no"))
+write_excel_csv(ne_sw_tests, file.path(tables_dir, "outdoor_NE_vs_SW_tests.csv"))
+
+ne_sw_plot <- ggplot(ne_sw_tests, aes(x = analyzer, y = RPD_pct, fill = significant)) +
+        geom_col(color = "black", linewidth = 0.2) +
+        geom_hline(yintercept = 0) +
+        facet_wrap(~ gas, ncol = 1, scales = "free_y") +
+        scale_fill_manual(values = c(yes = "#E41A1C", no = "grey70")) +
+        labs(title = "Outdoor NE vs SW: relative percentage difference",
+             subtitle = "RPD = 100 x mean(NE - SW) / mean concentration; red = Holm-adjusted Wilcoxon p < 0.05",
+             x = NULL, y = "RPD (%)") +
+        theme_bw(base_size = 12) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              legend.position = "bottom")
+ggsave(file.path(plots_dir, "outdoor_NE_vs_SW_RPD.png"), ne_sw_plot,
+       width = 9, height = 9, dpi = 300, bg = "white")
+
+#### 16. Background-choice summary               ####
+bg_summary <- ne_sw_tests %>%
+        group_by(gas) %>%
+        summarise(
+                analyzers_tested = n(),
+                analyzers_signif = sum(significant == "yes"),
+                median_RPD_pct   = median(RPD_pct),
+                mean_NE          = mean(mean_NE),
+                mean_SW          = mean(mean_SW),
+                .groups = "drop"
+        ) %>%
+        mutate(lower_background = ifelse(mean_NE < mean_SW, "Outdoor_NE", "Outdoor_SW"))
+write_excel_csv(bg_summary, file.path(tables_dir, "background_choice_summary.csv"))
+print(bg_summary)
