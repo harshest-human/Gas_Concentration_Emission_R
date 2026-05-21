@@ -315,8 +315,11 @@ emitrendplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALS
                            )) +
                 scale_y_continuous(
                         breaks = scales::pretty_breaks(n = 6),
-                        labels = scales::label_number(accuracy = 1, big.mark = "")
+                        labels = scales::number_format(accuracy = 0.1, big.mark = "")
                 ) +
+                # Floor the view at 0 without dropping data: coord_cartesian zooms
+                # rather than clips, so error-bar ranges stay intact.
+                coord_cartesian(ylim = c(0, NA)) +
                 labs(x = NULL, y = NULL) +
                 theme_classic() +
                 theme(
@@ -389,8 +392,11 @@ emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE)
                            )) +
                 scale_y_continuous(
                         breaks = scales::pretty_breaks(n = 5),
-                        labels = scales::label_number(accuracy = 0.1, big.mark = "")
+                        labels = scales::number_format(accuracy = 0.1, big.mark = "")
                 ) +
+                # Floor the view at 0 without dropping data: coord_cartesian zooms
+                # rather than clips, so boxplot/whisker statistics stay correct.
+                coord_cartesian(ylim = c(0, NA)) +
                 labs(x = NULL, y = NULL) +
                 theme_classic() +
                 theme(
