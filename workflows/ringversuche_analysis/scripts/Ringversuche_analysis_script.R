@@ -1,4 +1,4 @@
-#### Load libraries                             ####
+#### Load libraries                                                             ####
 library(tidyverse)   # ggplot2, dplyr, tidyr, stringr, purrr, readr, tibble
 library(lubridate)   # date-time parsing
 library(scales)      # axis breaks and number formatting
@@ -6,7 +6,7 @@ library(patchwork)   # wrap_plots()
 library(dplyr)       # for %>% and data manipulation
 # DescTools is used via DescTools::CCC() for Lin's concordance and need not be attached.
 
-#### Shared configuration                       ####
+#### Shared configuration                                                       ####
 # Variable labels (plotmath)
 # With measurement units - used by trend plots, boxplots and Bland-Altman.
 VAR_LABELS_UNITS <- c(
@@ -85,7 +85,7 @@ analyzer_aes <- function(x, lookup, default) {
         out
 }
 
-#### Data preparation functions                 ####
+#### Data preparation functions                                                 ####
 # indirect.CO2.balance(): CO2-balance ventilation rate and gas emissions
 indirect.CO2.balance <- function(df) {
         # ppm -> mg/m^3 at 0 degC (273.15 K) and 1 atm
@@ -214,7 +214,7 @@ reshaper <- function(df) {
         return(df_long)
 }
 
-#### Statistics helper functions                ####
+#### Statistics helper functions                                                ####
 # 8-point compass sector from wind direction (degrees)
 deg_to_compass8 <- function(deg) {
         labs <- c("N", "NE", "E", "SE", "S", "SW", "W", "NW")
@@ -249,7 +249,7 @@ ba_relative_stats <- function(x, y) {
         )
 }
 
-#### Plotting functions                         ####
+#### Plotting functions                                                         ####
 # emitrendplot(): mean +/- SD over time/hour/day, faceted by variable x location
 emitrendplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE, x = "DATE.TIME") {
         # Filter by location and variable
@@ -469,7 +469,7 @@ bland_altman_plot <- function(data, var_filter, analyzer_pair, location_filter =
                 )
 }
 
-#### 1. Paths and time range                    ####
+#### 1. Paths and time range                                                    ####
 base_dir   <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
 data_dir   <- file.path(base_dir, "clean_data/Version_9/long_format")
 meta_dir   <- file.path(base_dir, "meta_data")
@@ -483,7 +483,7 @@ end_time   <- as.POSIXct("2025-04-14 12:00:00", tz = "UTC")
 
 gases <- c("CO2", "CH4", "NH3")
 
-#### 2. Read & merge gas datasets               ####
+#### 2. Read & merge gas datasets                                               ####
 gas_files <- list.files(data_dir, pattern = "\\.csv$", full.names = TRUE)
 
 gas_data <- map_dfr(gas_files, read.csv, stringsAsFactors = FALSE) %>%
@@ -499,7 +499,7 @@ gas_data <- map_dfr(gas_files, read.csv, stringsAsFactors = FALSE) %>%
                NH3_ppm_in = NH3_in, NH3_ppm_N = NH3_N, NH3_ppm_S = NH3_S) %>%
         arrange(DATE.TIME, lab, analyzer)
 
-#### 3. Read animal, temperature, wind datasets ####
+#### 3. Read animal, temperature, wind datasets                                 ####
 animal_data <- read.csv(file.path(meta_dir, "RGB_Animal_count/20250408-15_LVAT_Animal_data.csv"),
                         stringsAsFactors = FALSE) %>%
         mutate(DATE.TIME = dmy_hm(DATE.TIME, tz = "UTC")) %>%
@@ -525,25 +525,25 @@ wind_data <- read.csv(file.path(meta_dir, "USA_mast_wind/20240101_20250825_USA_m
         rename(wd_mst = wd, ws_mst = ws) %>%
         select(DATE.TIME, wd_mst, ws_mst)
 
-#### 4. Combine all input parameters            ####
+#### 4. Combine all input parameters                                            ####
 input_combined <- gas_data %>%
         left_join(animal_data, by = "DATE.TIME") %>%
         left_join(T_RH_HOBO,   by = "DATE.TIME") %>%
         left_join(wind_data,   by = "DATE.TIME") %>%
         arrange(DATE.TIME, lab, analyzer)
 
-#### 5. Emissions per (lab, analyzer)           ####
+#### 5. Emissions per (lab, analyzer)                                           ####
 emission_result <- indirect.CO2.balance(input_combined)
-#### 6. Emissions reshaped                      ####
+#### 6. Emissions reshaped                                                      ####
 emission_reshaped <- reshaper(emission_result) %>%
         mutate(across(where(is.numeric), ~ round(.x, 2)))
 
-#### 7. Write csv tables                        ####
+#### 7. Write csv tables                                                        ####
 write_excel_csv(input_combined,  file.path(tables_dir, "20250408-15_input_combined.csv"))
 write_excel_csv(emission_result, file.path(tables_dir, "20250408-15_emission_result.csv"))
 write_excel_csv(emission_reshaped, file.path(tables_dir, "20250408-15_ringversuche_emission_reshaped.csv"))
 
-#### 8. Absolute concentration plots (incl. FTIR.4_old) ####
+#### 8. Absolute concentration plots (incl. FTIR.4_old)                         ####
 # Plotted FIRST, with FTIR.4_old still in, so the old vs new spectral-library
 # difference is visible before it is dropped from the rest of the analysis.
 c_trend_plot <- emitrendplot(emission_reshaped, y = c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3"))
@@ -551,7 +551,7 @@ c_boxplot    <- emiboxplot(emission_reshaped,   y = c("CO2_mgm3", "CH4_mgm3", "N
 ggsave(file.path(plots_dir, "c_trend_plot.png"), c_trend_plot, width = 12, height = 8, dpi = 300)
 ggsave(file.path(plots_dir, "c_boxplot.png"),    c_boxplot,    width = 12, height = 8, dpi = 300)
 
-#### 9. FTIR.4 vs FTIR.4_old (spectral-library check) ####
+#### 9. FTIR.4 vs FTIR.4_old (spectral-library check)                           ####
 # Justifies dropping FTIR.4_old: the two are the SAME instrument, FTIR.4_old
 # evaluated with the superseded spectral library, FTIR.4 re-evaluated from the
 # spectra with the corrected library. Fully paired (identical timestamps).
@@ -612,7 +612,7 @@ lib_plot <- ggplot(lib_points, aes(x = v_old, y = v_new)) +
 ggsave(file.path(plots_dir, "FTIR4_old_vs_new_scatter.png"), lib_plot,
        width = 11, height = 9, dpi = 300, bg = "white")
 
-#### 10. Drop FTIR.4_old from all further analysis ####
+#### 10. Drop FTIR.4_old from all further analysis                              ####
 # FTIR.4_old (old spectral library) showed large, systematic errors against
 # its own re-evaluation FTIR.4 (see Section 9: CO2 ~ -6 to -7 %, CH4/NH3
 # off by > 80 %). The deviation is a library artefact, not a real measurement
@@ -626,7 +626,7 @@ emission_reshaped_v <- reshaper(emission_result_v) %>%
 input_combined_v <- input_combined %>% filter(analyzer != "FTIR.4_old")
 analyzers <- sort(unique(input_combined_v$analyzer))
 
-#### 11. Delta, ventilation and emission plots (no FTIR.4_old) ####
+#### 11. Delta, ventilation and emission plots (no FTIR.4_old)                  ####
 all_plots <- list(
         d_trend_plot   = emitrendplot(emission_reshaped_v, y = c("delta_CO2", "delta_CH4", "delta_NH3")),
         d_boxplot      = emiboxplot(emission_reshaped_v,   y = c("delta_CO2", "delta_CH4", "delta_NH3")),
@@ -637,7 +637,7 @@ iwalk(all_plots, function(p, nm) {
         ggsave(file.path(plots_dir, paste0(nm, ".png")), p, width = 12, height = 8, dpi = 300)
 })
 
-#### 12. Relative Bland-Altman plots (no FTIR.4_old) ####
+#### 12. Relative Bland-Altman plots (no FTIR.4_old)                            ####
 # One row of relative Bland-Altman panels per lab-internal analyzer pair.
 save_bland_altman <- function(analyzer_pair, tag) {
         locs <- c("Outdoor_NE", "Outdoor_SW")
@@ -685,7 +685,7 @@ ba_table <- map_dfr(names(ba_pairs), function(tag) {
 })
 write_excel_csv(ba_table, file.path(tables_dir, "bland_altman_relative.csv"))
 
-#### 13. Pairwise method comparison: regression + Lin's CCC (no FTIR.4_old) ####
+#### 13. Pairwise method comparison: regression + Lin's CCC (no FTIR.4_old)     ####
 # For every analyzer pair, regress and score agreement on absolute
 # concentrations. Lin's CCC captures correlation AND bias in one number,
 # so it replaces the old Pearson correlogram.
@@ -742,7 +742,7 @@ ccc_plot <- pairwise_tbl %>%
 ggsave(file.path(plots_dir, "pairwise_ccc_heatmap.png"), ccc_plot,
        width = 12, height = 9, dpi = 300, bg = "white")
 
-#### 14. Wind-sector and wind-speed analysis (no FTIR.4_old) ####
+#### 14. Wind-sector and wind-speed analysis (no FTIR.4_old)                    ####
 # Long format: analyzer x timestamp x gas x location, with wind sector + speed.
 ws_long <- input_combined_v %>%
         filter(!is.na(wd_mst), !is.na(ws_mst)) %>%
@@ -818,7 +818,7 @@ polar_fig <- wrap_plots(lapply(gases, make_polar), ncol = 1)
 ggsave(file.path(plots_dir, "wind_direction_speed_polar.png"), polar_fig,
        width = 12, height = 15, dpi = 300, bg = "white")
 
-#### 15. Outdoor_NE vs Outdoor_SW comparison (no FTIR.4_old) ####
+#### 15. Outdoor_NE vs Outdoor_SW comparison (no FTIR.4_old)                    ####
 # Paired comparison (same analyzer & timestamp) for each gas x analyzer.
 ne_sw_tests <- map_dfr(gases, function(g) {
         map_dfr(as.character(analyzers), function(a) {
@@ -860,7 +860,7 @@ ne_sw_plot <- ggplot(ne_sw_tests, aes(x = analyzer, y = RPD_pct, fill = signific
 ggsave(file.path(plots_dir, "outdoor_NE_vs_SW_RPD.png"), ne_sw_plot,
        width = 9, height = 9, dpi = 300, bg = "white")
 
-#### 16. Background-choice summary               ####
+#### 16. Background-choice summary                                              ####
 bg_summary <- ne_sw_tests %>%
         group_by(gas) %>%
         summarise(
