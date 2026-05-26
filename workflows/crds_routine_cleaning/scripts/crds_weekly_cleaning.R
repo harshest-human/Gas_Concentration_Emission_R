@@ -395,3 +395,20 @@ CRDS8_20260309_20260509 <- autocrds(
   analyzer    = "CRDS8",
   sites       = c("IN", "S")
 )
+
+
+##### 20260309_20260509 #####
+CRDS8_20260509_20260523 <- autocrds(
+  input_path  = "D:/Data_Analysis_R/owncloud_sync_data/CRDS08_raw",
+  output_path = "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/crds_routine_cleaning/clean_data/crds_clean",
+  gas         = c("CO2", "CH4", "NH3", "H2O", "N2O"),
+  start_time  = "2026-05-09 01:54:17",
+  end_time    = "2026-05-23 16:47:37",
+  flush       = 60,
+  interval    = 240,
+  MPVPosition.levels = as.character(1:9),
+  location.levels    = c("1","2","3","4","5","6","7","in","S"),
+  lab         = "ATB",
+  analyzer    = "CRDS8",
+  sites       = c("IN", "S")
+)
