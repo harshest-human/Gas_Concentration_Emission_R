@@ -27,6 +27,14 @@ workflows/crds_routine_cleaning/*
 workflows/crds_routine_cleaning/scripts/*
 !workflows/crds_routine_cleaning/scripts/crds_weekly_cleaning.R
 
+# Allow device_comparison cleaning + plotting scripts (data subfolders stay
+# ignored so raw_data/, clean_data/, result_data/, meta_data/ are not committed).
+!workflows/device_comparison/
+workflows/device_comparison/*
+!workflows/device_comparison/scripts/
+workflows/device_comparison/scripts/*
+!workflows/device_comparison/scripts/*.R
+
 # Allow Version_7 reviewer-revision analysis scripts (added for
 # Biosystems Engineering YBENG-D-26-00430 first-revision response).
 !workflows/ringversuche_analysis/
