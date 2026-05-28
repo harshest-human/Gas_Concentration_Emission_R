@@ -107,19 +107,41 @@ BASELINE_EXCLUDE_BY_VAR  <- list(
 
 # Neighbour-source geometry of the LVAT site (manuscript Fig. 1):
 #   W       -> additional dairy barns (cow emissions: CO2, CH4, NH3)
-#   SW      -> covered feed-storage facility (low gas-phase impact)
+#   SW      -> COVERED feed-storage facility (negligible gas-phase emission)
 #   N, NW   -> open manure tank + biogas plant (NH3, CH4)
 #   NE,E,SE,S -> open land (clean reference)
-# A sampling line is "downwind of LVAT itself" when the wind blows from
-# the opposite side of the barn. NE line is contaminated by LVAT when wind
-# is from S/SW/W; SW line is contaminated by LVAT when wind is from N/NE/E.
-NE_CONTAM_LVAT     <- c("S","SW","W")
+#
+# V10b revision (2026-05-28). Empirical observation across the campaign:
+# Outdoor_NE concentrations were systematically HIGHER than Outdoor_SW for
+# all three gases (CO2 +1-3 %, CH4 +17-45 %, NH3 +1-100 %), including the
+# easterly sectors that the v3 geometry classed as "NE clean". This is
+# inconsistent with the v3 geometry, which had NE clean under E/NE wind
+# and SW downwind of LVAT under the same winds — under that scheme SW
+# should have been HIGHER, not lower.
+#
+# Reconciliation: the LVAT plume reaches the NE sampling line under all
+# southerly and most easterly sectors (ridge venting + side-curtain
+# dispersion, not just the simple lee side of the barn), and the SW line
+# enjoys near-clean status under the southerly and westerly sectors that
+# v3 (incorrectly) coded as contaminated. The covered feed-storage facility
+# SW of the barn is not a gas-phase source. Revised assignment:
+#   NE line downwind of LVAT under: S, SW, W, SE, E (5 sectors)
+#   SW line downwind of LVAT under: N, NE, E         (3 sectors, unchanged)
+#   NE neighbour-source under:      N, NW             (unchanged)
+#   SW neighbour-source under:      (none — feed store covered, W dairies
+#                                    are upwind of the open WSW-NE land)
+#   NE truly clean under:           NE only
+#   SW truly clean under:           S, SE, SW, W
+# Under this geometry the §11 auto-decision selects Outdoor_SW (lower
+# contam_time) for the present E-prevailing campaign, which also matches
+# the empirical SW < NE concentration ordering.
+NE_CONTAM_LVAT     <- c("S","SW","W","SE","E")
 SW_CONTAM_LVAT     <- c("N","NE","E")
 NE_CONTAM_NEIGHBOUR <- c("N","NW")   # manure tank / biogas reach NE line
-SW_CONTAM_NEIGHBOUR <- c("SW","W")   # feed store + W dairy reach SW line
+SW_CONTAM_NEIGHBOUR <- c()           # covered feed store; no chemical source
 # Truly clean (open-land upwind) sectors for each line:
-NE_CLEAN_SECTORS <- c("NE","E")
-SW_CLEAN_SECTORS <- c("S","SE")
+NE_CLEAN_SECTORS <- c("NE")
+SW_CLEAN_SECTORS <- c("S","SE","SW","W")
 
 #### Data preparation                                                         ####
 # Indirect CO2 balance — V10 adds MIN_DELTA_CO2 guard and drops negative
@@ -166,13 +188,11 @@ indirect.CO2.balance <- function(df, min_delta_co2 = MIN_DELTA_CO2,
                         Q_vent_S = ifelse(delta_CO2_S >= min_delta_co2,
                                           PCO2 / delta_CO2_S, NA_real_),
 
-                        # Physical sanity bound on Q (rows that survive the
-                        # MIN_DELTA_CO2 guard but still fall outside the
-                        # plausible NVDB ventilation range — defensive).
-                        Q_vent_N = ifelse(Q_vent_N >= q_lo & Q_vent_N <= q_hi,
-                                          Q_vent_N, NA_real_),
-                        Q_vent_S = ifelse(Q_vent_S >= q_lo & Q_vent_S <= q_hi,
-                                          Q_vent_S, NA_real_),
+                        # V10b: the [q_lo, q_hi] physical-sanity bound was
+                        # removed because it silently dropped rows without
+                        # documenting the loss; it is replaced by an explicit
+                        # per-analyser 1.5*IQR filter on Q_vent applied in
+                        # §11.5 with a dropout-count CSV.
 
                         e_NH3_gh_N = (delta_NH3_N * Q_vent_N / 1000) * n_dairycows_in,
                         e_CH4_gh_N = (delta_CH4_N * Q_vent_N / 1000) * n_dairycows_in,
@@ -835,6 +855,84 @@ cat(sprintf("retained_outdoor: %s\ndropped_outdoor:  %s\n",
             RETAINED_OUTDOOR, DROPPED_OUTDOOR),
     file = file.path(tables_dir, "outdoor_line_choice.txt"))
 
+#### 11.5 Per-analyser IQR filter on Q_vent + dropout diagnostic              ####
+# Replaces the V10 [MIN_Q_VENT, MAX_Q_VENT] sanity bound that was previously
+# applied inside indirect.CO2.balance(). Reviewer-requested change: caps were
+# silent and conflated genuine low-gradient hours (already handled by
+# MIN_DELTA_CO2 in §2.3) with per-analyser anomalies (especially FTIR.4).
+# The new filter applies 1.5*IQR per analyser to the surviving Q_vent values
+# and records the number of rows lost at every stage so the loss can be
+# reported in Results §3.2 and Discussion §4.4.
+
+# Count inputs and MIN_DELTA_CO2 dropouts per (analyzer, outdoor line).
+# An input row is a row of emission_result_v with a finite delta_CO2_*
+# (i.e. the row had both indoor and outdoor CO2 measurements). It is
+# dropped by MIN_DELTA_CO2 when delta_CO2_* < MIN_DELTA_CO2.
+qvent_dropouts_min_delta <- emission_result_v %>%
+        group_by(analyzer) %>%
+        summarise(
+                n_input_N        = sum(is.finite(delta_CO2_N)),
+                n_dropped_minD_N = sum(is.finite(delta_CO2_N) & delta_CO2_N <  MIN_DELTA_CO2),
+                n_after_minD_N   = sum(is.finite(delta_CO2_N) & delta_CO2_N >= MIN_DELTA_CO2),
+                n_input_S        = sum(is.finite(delta_CO2_S)),
+                n_dropped_minD_S = sum(is.finite(delta_CO2_S) & delta_CO2_S <  MIN_DELTA_CO2),
+                n_after_minD_S   = sum(is.finite(delta_CO2_S) & delta_CO2_S >= MIN_DELTA_CO2),
+                .groups = "drop")
+
+# Apply per-analyser 1.5*IQR removal on Q_vent_N and Q_vent_S.
+iqr_drop <- function(x) {
+        if (sum(is.finite(x)) < 4) return(x)
+        q <- quantile(x, c(0.25, 0.75), na.rm = TRUE)
+        H <- 1.5 * IQR(x, na.rm = TRUE)
+        ifelse(x < (q[1] - H) | x > (q[2] + H), NA_real_, x)
+}
+emission_result_v <- emission_result_v %>%
+        group_by(analyzer) %>%
+        mutate(
+                Q_vent_N_pre_iqr = Q_vent_N,
+                Q_vent_S_pre_iqr = Q_vent_S,
+                Q_vent_N         = iqr_drop(Q_vent_N),
+                Q_vent_S         = iqr_drop(Q_vent_S)
+        ) %>%
+        ungroup() %>%
+        # Re-propagate the IQR-filtered Q into the derived emission columns.
+        mutate(
+                e_NH3_gh_N   = (delta_NH3_N * Q_vent_N / 1000) * n_dairycows_in,
+                e_CH4_gh_N   = (delta_CH4_N * Q_vent_N / 1000) * n_dairycows_in,
+                e_NH3_gh_S   = (delta_NH3_S * Q_vent_S / 1000) * n_dairycows_in,
+                e_CH4_gh_S   = (delta_CH4_S * Q_vent_S / 1000) * n_dairycows_in,
+                e_NH3_ghLU_N = (e_NH3_gh_N * 500) / (n_dairycows_in * m_weight),
+                e_CH4_ghLU_N = (e_CH4_gh_N * 500) / (n_dairycows_in * m_weight),
+                e_NH3_ghLU_S = (e_NH3_gh_S * 500) / (n_dairycows_in * m_weight),
+                e_CH4_ghLU_S = (e_CH4_gh_S * 500) / (n_dairycows_in * m_weight)
+        )
+
+qvent_dropouts_iqr <- emission_result_v %>%
+        group_by(analyzer) %>%
+        summarise(
+                n_after_minD_N   = sum(is.finite(Q_vent_N_pre_iqr)),
+                n_dropped_iqr_N  = sum(is.finite(Q_vent_N_pre_iqr) & !is.finite(Q_vent_N)),
+                n_kept_N         = sum(is.finite(Q_vent_N)),
+                n_after_minD_S   = sum(is.finite(Q_vent_S_pre_iqr)),
+                n_dropped_iqr_S  = sum(is.finite(Q_vent_S_pre_iqr) & !is.finite(Q_vent_S)),
+                n_kept_S         = sum(is.finite(Q_vent_S)),
+                .groups = "drop")
+
+qvent_dropouts <- qvent_dropouts_min_delta %>%
+        select(analyzer, n_input_N, n_dropped_minD_N,
+               n_input_S, n_dropped_minD_S) %>%
+        left_join(qvent_dropouts_iqr, by = "analyzer") %>%
+        mutate(
+                pct_kept_N = 100 * n_kept_N / pmax(n_input_N, 1),
+                pct_kept_S = 100 * n_kept_S / pmax(n_input_S, 1)
+        ) %>%
+        select(analyzer,
+               n_input_N, n_dropped_minD_N, n_dropped_iqr_N, n_kept_N, pct_kept_N,
+               n_input_S, n_dropped_minD_S, n_dropped_iqr_S, n_kept_S, pct_kept_S)
+
+write_excel_csv(qvent_dropouts,
+                file.path(tables_dir, "qvent_filter_dropouts.csv"))
+
 #### 12. Build single-outdoor working dataset                                 ####
 # Map RETAINED -> suffix column for *_N / *_S in emission_result_v
 retain_suffix  <- c("Outdoor_NE" = "N", "Outdoor_SW" = "S")[[RETAINED_OUTDOOR]]
@@ -1119,19 +1217,23 @@ write_excel_csv(tukey_qe,    file.path(tables_dir, "tukey_ventilation_emission.c
 #   sig (ns / * / ** / ***).
 
 #### 17. Wind characterisation (campaign-wide)                                ####
-wind_rose <- input_combined_v %>%
+wind_rose_data <- input_combined_v %>%
         distinct(DATE.TIME, wd_mst) %>%
         filter(!is.na(wd_mst)) %>%
         mutate(wind_sector = deg_to_compass8(wd_mst)) %>%
         count(wind_sector, .drop = FALSE) %>%
-        ggplot(aes(x = wind_sector, y = n)) +
+        mutate(pct = 100 * n / sum(n),
+               label = sprintf("%d\n(%.1f%%)", n, pct))
+wind_rose <- ggplot(wind_rose_data, aes(x = wind_sector, y = n)) +
         geom_col(fill = "#377EB8", color = "black", width = 1) +
-        geom_text(aes(label = n), vjust = -0.3, size = 3.5) +
+        geom_text(aes(label = label), vjust = -0.2, size = 3.0, lineheight = 0.9) +
         coord_polar(start = -pi / 8) +
-        labs(title = "Campaign wind-sector frequency", x = NULL, y = "Hourly timestamps") +
+        labs(title = "Campaign wind-sector frequency",
+             subtitle = "Bars: hourly timestamp count;  annotation: count (% share)",
+             x = NULL, y = "Hourly timestamps") +
         theme_minimal(base_size = 13)
 ggsave(file.path(plots_dir, "wind_rose.png"), wind_rose,
-       width = 6, height = 6, dpi = 300, bg = "white")
+       width = 6.5, height = 6.5, dpi = 300, bg = "white")
 
 #### 18. Headline numbers — campaign mean Q and e on retained outdoor         ####
 # These are the numbers that go into the manuscript's §3.3/3.4 headlines.
