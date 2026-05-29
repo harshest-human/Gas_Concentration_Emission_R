@@ -227,14 +227,42 @@ make_hourly_wide_v5 <- function(df_long, lab_name) {
 
 write_outputs <- function(df_cycle, lab_name, analyzer_name, out_dir, file_stub) {
         gas_cols <- intersect(c("CO2","CH4","NH3","H2O","N2O"), names(df_cycle))
-        # Snap to 7.5-min grid, then run outlier removal per location BEFORE
-        # any hourly aggregation (so a single bad cycle doesn't contaminate
-        # the hourly mean).
+        # Snap to 7.5-min grid.
         cycle_df <- df_cycle %>%
                 mutate(DATE.TIME = round_to_interval(DATE.TIME, interval_sec = 450))
+
+        # Raw descriptive stats per (location, gas) BEFORE any outlier removal
+        # (handover §2.3, "pre-Stage-1 7.5-min data"). Goes into the M&M raw-
+        # stats paragraph and feeds Annex Table A1.
+        raw_stats <- cycle_df %>%
+                pivot_longer(any_of(gas_cols), names_to = "gas", values_to = "value") %>%
+                filter(!is.na(value), is.finite(value)) %>%
+                group_by(location, gas) %>%
+                summarise(n      = n(),
+                          mean   = mean(value),
+                          median = median(value),
+                          min    = min(value),
+                          max    = max(value),
+                          sd     = sd(value),
+                          .groups = "drop") %>%
+                mutate(lab = lab_name, analyzer = analyzer_name, .before = 1)
+        raw_stats_path <- file.path(out_dir,
+                                    sprintf("raw_stats_%s_%s.csv",
+                                            lab_name, analyzer_name))
+        write_excel_csv(raw_stats, raw_stats_path)
+        cat(sprintf("  -> %s  (raw 7.5-min stats, %d rows)\n",
+                    basename(raw_stats_path), nrow(raw_stats)))
+
+        # Stage 1: 1.5 x IQR per location on the 7.5-min data; logged to CSV.
+        stage1_path <- file.path(out_dir,
+                                 sprintf("stage1_dropouts_%s_%s.csv",
+                                         lab_name, analyzer_name))
         cat(sprintf("  outlier removal (per location):\n"))
-        cycle_df <- remove_outliers(cycle_df, group_cols = c("location"))
-        # Replace the input df_cycle for downstream long/wide builders
+        cycle_df <- remove_outliers(cycle_df,
+                                    group_cols     = c("location"),
+                                    summary_path   = stage1_path,
+                                    analyzer_label = analyzer_name,
+                                    lab_label      = lab_name)
         df_cycle <- cycle_df
 
         cycle_out <- df_cycle %>%

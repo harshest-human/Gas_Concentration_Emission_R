@@ -52,11 +52,17 @@ suppressPackageStartupMessages({
 # ---- helpers ----------------------------------------------------------------
 proj_root  <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
 helpers_dir_crds <- file.path(proj_root, "Picarro-G2508_CRDS_gas_measurement")
-helpers_dir_ftir <- file.path(proj_root, "GasmetCX4000_FTIR_Gas_Measurement")
+utils_dir        <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/scripts/utils"
 
+# piclean() is defined in Picarro_CRDS_data_cleaning_script.R in
+# Picarro-G2508_CRDS_gas_measurement/ — NOTE: if that file is missing, the
+# main loop below cannot run (it depends on piclean()). The 7.5-min CSVs
+# already in clean_data/Version_9/ were produced by an earlier run when
+# piclean was available; restoring that file is the prerequisite for any
+# fresh CRDS re-clean.
 source(file.path(helpers_dir_crds, "Picarro_CRDS_data_cleaning_script.R"))  # piclean()
-source(file.path(helpers_dir_crds, "remove_outliers_function.R"))           # remove_outliers()
-source(file.path(helpers_dir_ftir, "round to interval function.R"))         # round_to_interval()
+source(file.path(utils_dir,        "remove_outliers_function.R"))           # remove_outliers() — canonical copy
+source(file.path(utils_dir,        "round to interval function.R"))         # round_to_interval()
 
 # ---- config -----------------------------------------------------------------
 start_time <- "2025-04-08 12:00:00"
@@ -182,14 +188,44 @@ for (cfg in lab_configs) {
         cycle_df <- cycle_df %>%
                 mutate(DATE.TIME = round_to_interval(DATE.TIME, interval_sec = 450))
 
-        # 3b) outlier removal on 7.5-min cycles, per location (Tukey 1.5*IQR).
-        # Run before any hourly aggregation so the hourly mean isn't dragged
-        # by a single off-cycle reading.
+        # 3a) raw descriptive stats per (location, gas) BEFORE outlier removal
+        # (handover §2.3, "pre-Stage-1 7.5-min data"). One CSV per analyser,
+        # consumed by the main analysis script's aggregator.
+        raw_stats <- cycle_df %>%
+                pivot_longer(any_of(c("CO2","CH4","NH3","H2O","N2O")),
+                             names_to = "gas", values_to = "value") %>%
+                filter(!is.na(value), is.finite(value)) %>%
+                group_by(location, gas) %>%
+                summarise(n      = n(),
+                          mean   = mean(value),
+                          median = median(value),
+                          min    = min(value),
+                          max    = max(value),
+                          sd     = sd(value),
+                          .groups = "drop") %>%
+                mutate(lab = cfg$lab, analyzer = cfg$analyzer, .before = 1)
+        raw_stats_path <- file.path(out_dir,
+                                    sprintf("raw_stats_%s_%s.csv",
+                                            cfg$lab, cfg$analyzer))
+        write_excel_csv(raw_stats, raw_stats_path)
+        cat(sprintf("  -> %s  (raw 7.5-min stats, %d rows)\n",
+                    basename(raw_stats_path), nrow(raw_stats)))
+
+        # 3b) Stage 1: outlier removal on 7.5-min cycles, per location
+        # (Tukey 1.5*IQR). Run before any hourly aggregation so the hourly
+        # mean isn't dragged by a single off-cycle reading. Per-analyser
+        # dropout counts are logged to CSV.
+        stage1_path <- file.path(out_dir,
+                                 sprintf("stage1_dropouts_%s_%s.csv",
+                                         cfg$lab, cfg$analyzer))
         cat(sprintf("  outlier removal (per location):\n"))
         cycle_df <- remove_outliers(
                 cycle_df,
-                exclude_cols = c("step_id", "measuring.time"),
-                group_cols   = c("location")
+                exclude_cols   = c("step_id", "measuring.time"),
+                group_cols     = c("location"),
+                summary_path   = stage1_path,
+                analyzer_label = cfg$analyzer,
+                lab_label      = cfg$lab
         )
 
         # 4) write the 7.5-min intermediate

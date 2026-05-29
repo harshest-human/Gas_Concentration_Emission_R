@@ -460,6 +460,7 @@ bland_altman_plot <- function(data, var_filter, analyzer_pair,
 #### 0.  Paths, output directories                                            ####
 base_dir   <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
 data_dir   <- file.path(base_dir, "clean_data/Version_9/long_format")
+clean_dir  <- file.path(base_dir, "clean_data/Version_9")
 meta_dir   <- file.path(base_dir, "meta_data")
 tables_dir <- file.path(base_dir, "result_data/tables/Version_10")
 plots_dir  <- file.path(base_dir, "result_data/plots/Version_10")
@@ -482,50 +483,134 @@ init_report <- function(name, header) {
         invisible(f)
 }
 
-#### 1.  Sampling-cycle figure  (M&M, R2.4 / R2.5)                            ####
-# Visualises the 30-min, four-step Indoor/NE/Indoor/SW cycle. 3 min flush +
-# 4.5 min average per step. Replaces the prose description in §2.2.
-cycle <- tibble(
-        step     = factor(c("Step 1: Indoor", "Step 2: Outdoor NE",
-                            "Step 3: Indoor", "Step 4: Outdoor SW"),
-                          levels = c("Step 1: Indoor","Step 2: Outdoor NE",
-                                     "Step 3: Indoor","Step 4: Outdoor SW")),
-        start    = c(0, 7.5, 15, 22.5),
-        fill_col = c("#4DAF4A","#377EB8","#4DAF4A","#E41A1C")
+#### 1.  Sampling-cycle figure — clock-style, 60 min = two 30-min cycles      ####
+# Two 30-min cycles laid out around a 60-min clock face. Each step is 7.5 min:
+# 3.0 min flush (grey, labelled "flushing") + 4.5 min average (white, labelled
+# with the sampling location, NE/SW rendered as superscripts via plotmath).
+# Ticks placed at every step boundary (0, 3, 7.5, 10.5, 15, 18, 22.5, 25.5,
+# 30, 33, 37.5, 40.5, 45, 48, 52.5, 55.5) — i.e. each flush end + each
+# average end. Box ring is intentionally thin (radial width 0.3).
+
+cycle_segments <- tibble(
+        cycle    = rep(c(1, 2), each = 8),
+        step     = rep(1:4, each = 2, times = 2),
+        segment  = rep(c("flush", "average"), times = 8),
+        location = rep(c("Indoor", "Outdoor_NE", "Indoor", "Outdoor_SW"),
+                       each = 2, times = 2)
 ) %>%
-        mutate(flush_end = start + 3,
-               avg_end   = start + 7.5)
-cycle_plot <- ggplot(cycle) +
-        geom_rect(aes(xmin = start, xmax = flush_end, ymin = 0.2, ymax = 0.8),
-                  fill = "grey80", color = "black", linewidth = 0.3) +
-        geom_rect(aes(xmin = flush_end, xmax = avg_end, ymin = 0.2, ymax = 0.8,
-                      fill = step), color = "black", linewidth = 0.3) +
-        geom_text(aes(x = (start + flush_end) / 2, y = 1.0,
-                      label = "flush\n3.0 min"), size = 3, lineheight = 0.8) +
-        geom_text(aes(x = (flush_end + avg_end) / 2, y = 1.0,
-                      label = "average\n4.5 min"), size = 3, lineheight = 0.8) +
-        geom_text(aes(x = (start + avg_end) / 2, y = -0.05,
-                      label = step), size = 3.5, hjust = 0.5) +
-        scale_fill_manual(values = c("Step 1: Indoor" = "#4DAF4A",
-                                     "Step 2: Outdoor NE" = "#377EB8",
-                                     "Step 3: Indoor" = "#4DAF4A",
-                                     "Step 4: Outdoor SW" = "#E41A1C"),
-                          guide = "none") +
-        scale_x_continuous(breaks = c(0, 7.5, 15, 22.5, 30),
-                           labels = paste0(c(0, 7.5, 15, 22.5, 30), " min")) +
-        coord_cartesian(ylim = c(-0.2, 1.3), xlim = c(-1, 31)) +
-        labs(title = "30-min sampling cycle, repeated twice per hour",
-             subtitle = "Each step: 3.0 min flush (discarded) + 4.5 min average (retained)",
-             x = NULL, y = NULL) +
-        theme_minimal(base_size = 12) +
-        theme(panel.grid.major.y = element_blank(),
-              panel.grid.minor   = element_blank(),
+        mutate(step_start = (cycle - 1) * 30 + (step - 1) * 7.5,
+               start_min  = step_start + ifelse(segment == "flush", 0, 3),
+               end_min    = step_start + ifelse(segment == "flush", 3, 7.5),
+               midpoint   = (start_min + end_min) / 2,
+               # plotmath expressions — parse=TRUE in geom_text renders them.
+               # atop() stacks "measuring" above the location label inside
+               # each averaged box; NE/SW become superscripts via ^"...".
+               text_label = case_when(
+                       segment  == "flush"      ~ "flushing",
+                       location == "Indoor"     ~ "atop('measuring','Indoor')",
+                       location == "Outdoor_NE" ~ "atop('measuring',Outdoor^'NE')",
+                       location == "Outdoor_SW" ~ "atop('measuring',Outdoor^'SW')"
+               ))
+
+# Major tick positions = step boundaries (these get numeric "X minutes" labels).
+tick_breaks <- c(0, 3, 7.5, 10.5, 15, 18, 22.5, 25.5,
+                 30, 33, 37.5, 40.5, 45, 48, 52.5, 55.5)
+
+# Ruler/protractor minor ticks every 0.5 min — short radial lines just outside
+# the box ring, no numeric label.
+major_ticks <- tibble(x = tick_breaks)
+minor_ticks <- tibble(x = setdiff(seq(0, 59.5, by = 0.5), tick_breaks))
+
+# Inner step ring — one box per 7.5-min step (4 steps per cycle x 2 cycles).
+step_blocks <- tibble(
+        cycle = rep(c(1, 2), each = 4),
+        step  = rep(1:4, times = 2)
+) %>%
+        mutate(start_min = (cycle - 1) * 30 + (step - 1) * 7.5,
+               end_min   = start_min + 7.5,
+               midpoint  = (start_min + end_min) / 2,
+               label     = paste0("Step ", step))
+
+centre_label <- tibble(x = 0, y = 0, label = "1 h\n= 2 cycles")
+
+cycle_plot <- ggplot(cycle_segments) +
+        # Inner ring — one box per 7.5-min step labelled "Step 1..4".
+        geom_rect(data = step_blocks,
+                  aes(xmin = start_min, xmax = end_min,
+                      ymin = 0.80, ymax = 0.97),
+                  fill = "grey97", color = "grey55", linewidth = 0.25) +
+        geom_text(data = step_blocks,
+                  aes(x = midpoint, y = 0.885, label = label),
+                  size = 2.8) +
+        # Main ring — flush (grey) and average (white) sub-segments.
+        geom_rect(data = filter(cycle_segments, segment == "flush"),
+                  aes(xmin = start_min, xmax = end_min,
+                      ymin = 1.0, ymax = 1.3),
+                  fill = "grey85", color = "black", linewidth = 0.3) +
+        geom_rect(data = filter(cycle_segments, segment == "average"),
+                  aes(xmin = start_min, xmax = end_min,
+                      ymin = 1.0, ymax = 1.3),
+                  fill = "white", color = "black", linewidth = 0.3) +
+        geom_text(aes(x = midpoint, y = 1.15, label = text_label),
+                  parse = TRUE, size = 2.8, lineheight = 0.85) +
+        # Ruler-style minor ticks (lines only — no labels).
+        geom_segment(data = minor_ticks,
+                     aes(x = x, xend = x, y = 1.30, yend = 1.34),
+                     color = "grey55", linewidth = 0.25) +
+        # Ruler-style major ticks (longer black lines, labels via scale).
+        geom_segment(data = major_ticks,
+                     aes(x = x, xend = x, y = 1.30, yend = 1.42),
+                     color = "black", linewidth = 0.5) +
+        geom_text(data = centre_label,
+                  aes(x = x, y = y, label = label),
+                  size = 4.0, fontface = "bold", lineheight = 0.9) +
+        coord_polar(theta = "x", start = 0, direction = 1, clip = "off") +
+        scale_x_continuous(limits = c(0, 60),
+                           breaks = tick_breaks,
+                           labels = function(x) paste0(x, " minutes")) +
+        scale_y_continuous(limits = c(0, 1.6), expand = c(0, 0)) +
+        labs(title    = "60-min sampling protocol: two 30-min cycles",
+             subtitle = "Each step: 3.0 min flushing (discarded) + 4.5 min measuring (retained)") +
+        theme_minimal(base_size = 16) +
+        theme(axis.title         = element_blank(),
               axis.text.y        = element_blank(),
               axis.ticks.y       = element_blank(),
-              plot.title         = element_text(hjust = 0.5),
-              plot.subtitle      = element_text(hjust = 0.5))
+              axis.text.x        = element_text(size = 13, face = "bold"),
+              panel.grid.major.x = element_blank(),
+              panel.grid.minor.x = element_blank(),
+              panel.grid.major.y = element_blank(),
+              panel.grid.minor.y = element_blank(),
+              plot.title         = element_text(hjust = 0.5, size = 17),
+              plot.subtitle      = element_text(hjust = 0.5, size = 12),
+              plot.margin        = margin(0.4, 2.5, 0.4, 2.5, unit = "cm"))
 ggsave(file.path(plots_dir, "sampling_cycle.png"), cycle_plot,
-       width = 10, height = 3, dpi = 300, bg = "white")
+       width = 10, height = 8.5, dpi = 300, bg = "white")
+
+# ----- Hourly-averaging methodology paragraph (for manuscript §2.2) ----------
+hourly_averaging_paragraph <- paste(
+        "Each analyser produces eight averaged 4.5-min samples per hour, one per step",
+        "of the four-step cycle repeated twice. The hourly mean at each sampling",
+        "location is computed as the arithmetic mean of the corresponding samples:",
+        "four samples per hour for the indoor ring line (Step 1 and Step 3 of both",
+        "cycles) and two samples per hour for each outdoor line (Step 2 of both cycles",
+        "for Outdoor_NE; Step 4 of both cycles for Outdoor_SW). Step-to-location",
+        "mapping is implemented in three ways depending on each analyser's data",
+        "delivery format. Line-based FTIR analysers (ATB FTIR.1: Line 1 = NE,",
+        "2 = Indoor, 3 = SW; LUFA FTIR.2: Messstelle 1 = Indoor, 2 = SW, 3 = NE) use",
+        "the explicit line identifier embedded in the raw results file. MPV-based CRDS",
+        "analysers (ATB CRDS.1: positions 1/2/3 = NE/Indoor/SW; UB CRDS.3: positions",
+        "8/1/9 = NE/Indoor/SW; LUFA CRDS.2: positions 3/1/2 = NE/Indoor/SW) treat each",
+        "contiguous run of identical MPV position as one step. Time-cycle analysers",
+        "(MBBM FTIR.3 and ANECO FTIR.4) have no embedded line identifier; the step is",
+        "inferred from the clock time within the cycle, anchored at the campaign",
+        "start (2025-04-08 12:00 UTC) with a fixed (Indoor, Outdoor_NE, Indoor,",
+        "Outdoor_SW) rotation every 7.5 min. After step assignment, the first 3 min",
+        "of each step is discarded (flush) and the remaining 4.5 min is averaged.",
+        "The retained averages are then aggregated to hourly means by location for",
+        "downstream Δc, Q and emission calculations.",
+        sep = " ")
+writeLines(hourly_averaging_paragraph,
+           file.path(report_dir, "07_hourly_averaging_method.txt"))
 
 #### 2.  Read & merge gas datasets                                            ####
 gas_files <- list.files(data_dir, pattern = "\\.csv$", full.names = TRUE)
@@ -579,6 +664,65 @@ emission_reshaped <- reshaper(emission_result) %>%
 write_excel_csv(input_combined,    file.path(tables_dir, "20250408-15_input_combined.csv"))
 write_excel_csv(emission_result,   file.path(tables_dir, "20250408-15_emission_result.csv"))
 write_excel_csv(emission_reshaped, file.path(tables_dir, "20250408-15_ringversuche_emission_reshaped.csv"))
+
+#### 4.5 Raw 7.5-min descriptive stats aggregation  (handover §2.3 / Annex A1) ####
+# Single consolidated CSV for the manuscript Annex (per-Annex-table-1
+# question — option 2). Per-analyser raw_stats_<lab>_<analyzer>.csv files
+# are produced by the cleaners (FTIR/CRDS_ringversuche_cleaning.R) on the
+# pre-Stage-1 7.5-min data; if any analyser is missing its file (e.g. the
+# cleaners have not been re-run since the new logic was added), the
+# fallback computes the stats from the existing post-Stage-1 7.5_avg CSVs
+# in clean_dir and flags those rows in a `source` column.
+
+rs_files <- list.files(clean_dir,
+                       pattern = "^raw_stats_.+\\.csv$",
+                       full.names = TRUE)
+raw_stats_pre <- if (length(rs_files) > 0) {
+        map_dfr(rs_files, function(f) {
+                d <- read.csv(f, stringsAsFactors = FALSE)
+                d$source <- "pre-Stage-1 (from cleaner)"
+                d
+        })
+} else {
+        tibble()
+}
+known_pairs <- if (nrow(raw_stats_pre) > 0) {
+        unique(paste(raw_stats_pre$lab, raw_stats_pre$analyzer))
+} else {
+        character(0)
+}
+
+cycle_files <- list.files(clean_dir,
+                          pattern = "^20250408-15_7\\.5_avg_.+\\.csv$",
+                          full.names = TRUE)
+raw_stats_fallback <- map_dfr(cycle_files, function(f) {
+        bn <- basename(f)
+        m  <- regmatches(bn, regexec("^20250408-15_7\\.5_avg_([^_]+)_(.+)\\.csv$", bn))[[1]]
+        if (length(m) < 3) return(NULL)
+        lab_x <- m[2]; ana_x <- m[3]
+        if (paste(lab_x, ana_x) %in% known_pairs) return(NULL)
+        d <- read.csv(f, stringsAsFactors = FALSE)
+        gas_cols <- intersect(c("CO2","CH4","NH3","H2O","N2O"), names(d))
+        if (length(gas_cols) == 0 || !"location" %in% names(d)) return(NULL)
+        d %>%
+                pivot_longer(any_of(gas_cols), names_to = "gas", values_to = "value") %>%
+                filter(!is.na(value), is.finite(value)) %>%
+                group_by(location, gas) %>%
+                summarise(n = n(), mean = mean(value),
+                          median = median(value), min = min(value),
+                          max = max(value), sd = sd(value), .groups = "drop") %>%
+                mutate(lab = lab_x, analyzer = ana_x,
+                       source = "post-Stage-1 (from 7.5_avg CSV)",
+                       .before = 1)
+})
+
+raw_stats_all <- bind_rows(raw_stats_pre, raw_stats_fallback) %>%
+        arrange(lab, analyzer, location, gas) %>%
+        mutate(across(c(mean, median, min, max, sd), ~ round(.x, 3))) %>%
+        relocate(lab, analyzer, location, gas, n,
+                 mean, median, min, max, sd, source)
+write_excel_csv(raw_stats_all,
+                file.path(tables_dir, "raw_stats_all_analyzers.csv"))
 
 #### 5.  Animal-count diagnostic  (R2.22 — were enough cows present?)         ####
 animal_summary <- animal_data %>%
@@ -701,6 +845,49 @@ ggsave(file.path(plots_dir, "FTIR2_NH3_offset_cancels_in_delta.png"), ftir2_canc
 
 #### 9.  Drop FTIR.4_old; rebuild working datasets  (R2.7 step 1)              ####
 emission_result_v  <- emission_result %>% filter(analyzer != "FTIR.4_old")
+
+#### 9.5  Stage 2 — mask Q/e/Δc cells when any Δc is negative (handover §2.6c) ####
+# Steady-state mass balance: c_indoor >= c_outdoor for emitting gases.
+# A negative Δc indicates either a measurement artefact (analyser noise,
+# adsorption lag) or a transient mass-balance violation (e.g. brief
+# outdoor plume from the western dairies blowing across the indoor ring
+# line). Per handover §2.6c the mask is per-(analyser, hour, outdoor):
+# when any of CO2/CH4/NH3 has Δc < 0 for an outdoor line in a given row,
+# only that outdoor's Δc / Q / e cells are masked. Other analysers' rows
+# at the same hour stay intact; the same row's _N data are unaffected
+# when only _S has a negative Δc and vice versa.
+
+stage2_dropouts <- emission_result_v %>%
+        select(DATE.TIME, lab, analyzer,
+               matches("^delta_(CO2|CH4|NH3)_(N|S)$")) %>%
+        pivot_longer(matches("^delta_"),
+                     names_to      = c("gas", "outdoor"),
+                     names_pattern = "^delta_(CO2|CH4|NH3)_(N|S)$",
+                     values_to     = "delta") %>%
+        mutate(outdoor = recode(outdoor,
+                                "N" = "Outdoor_NE", "S" = "Outdoor_SW")) %>%
+        group_by(analyzer, gas, outdoor) %>%
+        summarise(n_total      = n(),
+                  n_negative   = sum(delta < 0, na.rm = TRUE),
+                  pct_negative = round(100 * n_negative / n_total, 2),
+                  .groups      = "drop")
+write_excel_csv(stage2_dropouts, file.path(tables_dir, "stage2_dropouts.csv"))
+
+mask_cols_N <- c("delta_CO2_N",   "delta_CH4_N", "delta_NH3_N",
+                 "Q_vent_N",
+                 "e_CH4_gh_N",    "e_NH3_gh_N",
+                 "e_CH4_ghLU_N",  "e_NH3_ghLU_N")
+mask_cols_S <- gsub("_N$", "_S", mask_cols_N)
+
+emission_result_v <- emission_result_v %>%
+        mutate(.neg_N = (delta_CO2_N < 0) | (delta_CH4_N < 0) | (delta_NH3_N < 0),
+               .neg_S = (delta_CO2_S < 0) | (delta_CH4_S < 0) | (delta_NH3_S < 0)) %>%
+        mutate(across(any_of(mask_cols_N),
+                      ~ ifelse(.neg_N %in% TRUE, NA_real_, .x)),
+               across(any_of(mask_cols_S),
+                      ~ ifelse(.neg_S %in% TRUE, NA_real_, .x))) %>%
+        select(-.neg_N, -.neg_S)
+
 emission_reshaped_v <- reshaper(emission_result_v) %>%
         mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
         mutate(analyzer = fct_drop(analyzer))
@@ -1216,24 +1403,181 @@ write_excel_csv(tukey_qe,    file.path(tables_dir, "tukey_ventilation_emission.c
 #   p_tukey, p_holm (Holm-adjusted across the (variable, location) panel),
 #   sig (ns / * / ** / ***).
 
-#### 17. Wind characterisation (campaign-wide)                                ####
-wind_rose_data <- input_combined_v %>%
-        distinct(DATE.TIME, wd_mst) %>%
-        filter(!is.na(wd_mst)) %>%
-        mutate(wind_sector = deg_to_compass8(wd_mst)) %>%
-        count(wind_sector, .drop = FALSE) %>%
-        mutate(pct = 100 * n / sum(n),
-               label = sprintf("%d\n(%.1f%%)", n, pct))
-wind_rose <- ggplot(wind_rose_data, aes(x = wind_sector, y = n)) +
-        geom_col(fill = "#377EB8", color = "black", width = 1) +
-        geom_text(aes(label = label), vjust = -0.2, size = 3.0, lineheight = 0.9) +
+#### 17. Wind characterisation — daily campaign + seasonal historical         ####
+# Two polar-bar plots. In both, bars are stacked by wind-speed bin and each
+# sector is annotated (in blue) with its hourly count and per-panel % share.
+#
+#   wind_rose_daily.png    — 7 panels, one per campaign day
+#                            (08.04.2025 to 14.04.2025; 15.04 deliberately
+#                            excluded because the campaign ends 14.04 12:00)
+#   wind_rose_seasonal.png — 4 panels, historical seasons in calendar order
+#                            (Summer 2024 -> Autumn 2024 -> Winter 2024/25
+#                            -> Spring 2025 up to 07.04.2025)
+
+# Shared wind-speed bins + colour palette (Figure-2 reference style:
+# burgundy at low speeds -> blue at high speeds).
+WS_BREAKS  <- c(0, 0.5, 1.0, 2.0, 3.0, 4.0, Inf)
+WS_LABELS  <- c("0.0-0.5","0.5-1.0","1.0-2.0","2.0-3.0","3.0-4.0",">=4.0")
+WS_COLOURS <- c("0.0-0.5" = "#8C1838",   # dark wine
+                "0.5-1.0" = "#E04344",   # red
+                "1.0-2.0" = "#F49649",   # orange
+                "2.0-3.0" = "#E3E394",   # pale yellow-green
+                "3.0-4.0" = "#4DBC8E",   # teal-green
+                ">=4.0"   = "#3E81BA")   # blue
+
+# Read the FULL wind series (campaign window + historical year).
+wind_full <- read.csv(file.path(meta_dir, "USA_mast_wind/20240101_20250825_USA_mast_16_hourly_uvw_wd_ws.csv"),
+                      stringsAsFactors = FALSE) %>%
+        mutate(DATE.TIME = as.POSIXct(datetime_hour, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")) %>%
+        rename(wd_mst = wd, ws_mst = ws) %>%
+        filter(!is.na(wd_mst), !is.na(ws_mst)) %>%
+        mutate(wind_sector = deg_to_compass8(wd_mst),
+               ws_bin      = cut(ws_mst, breaks = WS_BREAKS, labels = WS_LABELS,
+                                 include.lowest = TRUE, right = FALSE))
+
+# --- (a) Daily wind roses for the 7 campaign days ----------------------------
+daily_data <- wind_full %>%
+        filter(DATE.TIME >= start_time, DATE.TIME <= end_time) %>%
+        mutate(day_label = format(as.Date(DATE.TIME), "%d.%m.%Y")) %>%
+        group_by(day_label) %>% mutate(day_total = n()) %>% ungroup()
+
+daily_stack <- daily_data %>%
+        group_by(day_label, day_total, wind_sector, ws_bin) %>%
+        summarise(n_bin = n(), .groups = "drop") %>%
+        mutate(pct = 100 * n_bin / day_total)
+
+daily_totals <- daily_stack %>%
+        group_by(day_label, wind_sector) %>%
+        summarise(total_n   = sum(n_bin),
+                  total_pct = sum(pct),
+                  .groups   = "drop")
+# Annotate ONLY the most prevalent sector per day, with the share as "X.X%".
+daily_top <- daily_totals %>%
+        group_by(day_label) %>%
+        slice_max(total_pct, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
+        mutate(label = sprintf("%.1f%%", total_pct))
+
+# Order panels chronologically (dd.mm.yyyy string sort wouldn't be chronological).
+day_levels   <- daily_data %>% distinct(day = as.Date(DATE.TIME), day_label) %>%
+        arrange(day) %>% pull(day_label)
+daily_stack <- daily_stack %>% mutate(day_label = factor(day_label, levels = day_levels))
+daily_top   <- daily_top   %>% mutate(day_label = factor(day_label, levels = day_levels))
+
+# Ring labels — placed at the S compass position so they sit on each ring
+# radius going outward from the centre. One copy per panel.
+RING_STEPS <- c(20, 40, 60, 80)
+ring_labels_daily <- expand.grid(day_label = factor(day_levels, levels = day_levels),
+                                 y_value   = RING_STEPS,
+                                 stringsAsFactors = FALSE) %>%
+        mutate(label       = sprintf("%d%%", y_value),
+               wind_sector = factor("S", levels = c("N","NE","E","SE","S","SW","W","NW")))
+
+daily_rose <- ggplot(daily_stack, aes(x = wind_sector, y = pct, fill = ws_bin)) +
+        geom_col(color = "black", linewidth = 0.2, width = 0.95) +
+        geom_text(data = ring_labels_daily,
+                  aes(x = wind_sector, y = y_value, label = label),
+                  color = "grey30", size = 3.3, inherit.aes = FALSE) +
+        geom_text(data = daily_top,
+                  aes(x = wind_sector,
+                      y = pmin(total_pct + 6, 95),
+                      label = label),
+                  color = "#1F4E79", size = 5.0,
+                  fontface = "bold", inherit.aes = FALSE) +
         coord_polar(start = -pi / 8) +
-        labs(title = "Campaign wind-sector frequency",
-             subtitle = "Bars: hourly timestamp count;  annotation: count (% share)",
-             x = NULL, y = "Hourly timestamps") +
-        theme_minimal(base_size = 13)
-ggsave(file.path(plots_dir, "wind_rose.png"), wind_rose,
-       width = 6.5, height = 6.5, dpi = 300, bg = "white")
+        facet_wrap(~ day_label, nrow = 2) +
+        scale_fill_manual(values = WS_COLOURS, drop = FALSE,
+                          name = expression("Wind speed (m s"^-1*")")) +
+        scale_y_continuous(limits = c(0, 100),
+                           breaks = c(0, 20, 40, 60, 80, 100)) +
+        labs(x = NULL, y = NULL) +
+        theme_bw(base_size = 14) +
+        theme(legend.position  = "bottom",
+              strip.text       = element_text(face = "bold", size = 14),
+              strip.background = element_rect(fill = "grey95"),
+              axis.text.x      = element_text(size = 13),
+              axis.text.y      = element_blank(),
+              axis.ticks.y     = element_blank(),
+              panel.grid.minor = element_blank(),
+              legend.text      = element_text(size = 13),
+              legend.title     = element_text(size = 14))
+ggsave(file.path(plots_dir, "wind_rose_daily.png"), daily_rose,
+       width = 18, height = 10, dpi = 300, bg = "white")
+
+# --- (b) Seasonal wind roses for the year preceding the campaign -------------
+SEASON_RANGES <- tibble::tribble(
+        ~season_label,                              ~start,       ~end,
+        "Summer 2024\n01.06.2024 - 31.08.2024",     "2024-06-01", "2024-08-31",
+        "Autumn 2024\n01.09.2024 - 30.11.2024",     "2024-09-01", "2024-11-30",
+        "Winter 2024/25\n01.12.2024 - 28.02.2025",  "2024-12-01", "2025-02-28",
+        "Spring 2025\n01.03.2025 - 07.04.2025",     "2025-03-01", "2025-04-07"
+)
+
+seasonal_data <- map_dfr(seq_len(nrow(SEASON_RANGES)), function(i) {
+        rng <- SEASON_RANGES[i, ]
+        wind_full %>%
+                filter(DATE.TIME >= as.POSIXct(paste(rng$start, "00:00:00"), tz = "UTC"),
+                       DATE.TIME <= as.POSIXct(paste(rng$end,   "23:59:59"), tz = "UTC")) %>%
+                mutate(season = rng$season_label)
+}) %>%
+        mutate(season = factor(season, levels = SEASON_RANGES$season_label))
+
+seasonal_stack <- seasonal_data %>%
+        group_by(season) %>% mutate(season_total = n()) %>% ungroup() %>%
+        group_by(season, season_total, wind_sector, ws_bin) %>%
+        summarise(n_bin = n(), .groups = "drop") %>%
+        mutate(pct = 100 * n_bin / season_total)
+
+seasonal_totals <- seasonal_stack %>%
+        group_by(season, wind_sector) %>%
+        summarise(total_n   = sum(n_bin),
+                  total_pct = sum(pct),
+                  .groups   = "drop")
+# Annotate ONLY the most prevalent sector per season, with the share as "X.X%".
+seasonal_top <- seasonal_totals %>%
+        group_by(season) %>%
+        slice_max(total_pct, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
+        mutate(label = sprintf("%.1f%%", total_pct))
+
+ring_labels_seasonal <- expand.grid(
+        season  = factor(SEASON_RANGES$season_label,
+                         levels = SEASON_RANGES$season_label),
+        y_value = RING_STEPS,
+        stringsAsFactors = FALSE) %>%
+        mutate(label       = sprintf("%d%%", y_value),
+               wind_sector = factor("S", levels = c("N","NE","E","SE","S","SW","W","NW")))
+
+seasonal_rose <- ggplot(seasonal_stack, aes(x = wind_sector, y = pct, fill = ws_bin)) +
+        geom_col(color = "black", linewidth = 0.2, width = 0.95) +
+        geom_text(data = ring_labels_seasonal,
+                  aes(x = wind_sector, y = y_value, label = label),
+                  color = "grey30", size = 3.0, inherit.aes = FALSE) +
+        geom_text(data = seasonal_top,
+                  aes(x = wind_sector,
+                      y = pmin(total_pct + 3, 95),
+                      label = label),
+                  color = "#1F4E79", size = 4.6,
+                  fontface = "bold", inherit.aes = FALSE) +
+        coord_polar(start = -pi / 8) +
+        facet_wrap(~ season, nrow = 1) +
+        scale_fill_manual(values = WS_COLOURS, drop = FALSE,
+                          name = expression("Wind speed (m s"^-1*")")) +
+        scale_y_continuous(limits = c(0, 100),
+                           breaks = c(0, 20, 40, 60, 80, 100)) +
+        labs(x = NULL, y = NULL) +
+        theme_bw(base_size = 14) +
+        theme(legend.position  = "bottom",
+              strip.text       = element_text(face = "bold", size = 14),
+              strip.background = element_rect(fill = "grey95"),
+              axis.text.x      = element_text(size = 13),
+              axis.text.y      = element_blank(),
+              axis.ticks.y     = element_blank(),
+              panel.grid.minor = element_blank(),
+              legend.text      = element_text(size = 13),
+              legend.title     = element_text(size = 14))
+ggsave(file.path(plots_dir, "wind_rose_seasonal.png"), seasonal_rose,
+       width = 18, height = 6.5, dpi = 300, bg = "white")
 
 #### 18. Headline numbers — campaign mean Q and e on retained outdoor         ####
 # These are the numbers that go into the manuscript's §3.3/3.4 headlines.
