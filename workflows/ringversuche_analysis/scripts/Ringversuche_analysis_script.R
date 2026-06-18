@@ -732,9 +732,9 @@ base_dir   <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringver
 data_dir   <- file.path(base_dir, "clean_data/Version_9/long_format")
 clean_dir  <- file.path(base_dir, "clean_data/Version_9")
 meta_dir   <- file.path(base_dir, "meta_data")
-tables_dir <- file.path(base_dir, "result_data/tables/Version_11")
-plots_dir  <- file.path(base_dir, "result_data/plots/Version_11")
-report_dir <- file.path(base_dir, "result_data/text_reports/Version_11")
+tables_dir <- file.path(base_dir, "result_data/tables/Version_12")
+plots_dir  <- file.path(base_dir, "result_data/plots/Version_12")
+report_dir <- file.path(base_dir, "result_data/text_reports/Version_12")
 for (d in c(tables_dir, plots_dir, report_dir))
         dir.create(d, showWarnings = FALSE, recursive = TRUE)
 
@@ -2466,7 +2466,7 @@ write_excel_csv(tukey_abs,   file.path(tables_dir, "tukey_concentrations_long.cs
 write_excel_csv(tukey_delta, file.path(tables_dir, "tukey_delta_concentrations_long.csv"))
 write_excel_csv(tukey_qe,    file.path(tables_dir, "tukey_ventilation_emission_long.csv"))
 
-# Remove legacy matrix-style table exports so Version_11 keeps the PNG panels as
+# Remove legacy matrix-style table exports so Version_12 keeps the PNG panels as
 # the manuscript-facing output format for these comparisons.
 legacy_tukey_files <- c(
         "tukey_concentrations.csv",
