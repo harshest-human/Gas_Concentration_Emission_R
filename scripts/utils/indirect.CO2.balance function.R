@@ -74,6 +74,13 @@ emierrorbarplot <- function(data, y = NULL) {
         library(dplyr)
         library(ggplot2)
         library(scales)
+
+        analyzer_labels <- c(
+                "crds" = "CRDS",
+                "logas_ndir" = "PRONOVA",
+                "logas_tdlas" = "CUBIC",
+                "otice" = "OTICE"
+        )
         
         if ("var" %in% names(data) && !"variable" %in% names(data)) {
                 data <- data %>% rename(variable = var)
@@ -110,24 +117,26 @@ emierrorbarplot <- function(data, y = NULL) {
         
         data <- data %>%
                 mutate(
+                        analyzer = as.character(analyzer),
+                        analyzer = recode(analyzer, !!!analyzer_labels, .default = analyzer),
                         facet_label = factor(
                                 facet_labels[as.character(variable)],
                                 levels = facet_labels[y]
                         )
                 )
-        
+
         analyzer_colors <- c(
-                "logas_tdlas" = "#1b9e77",
-                "logas_ndir" = "#7570b3",
-                "crds" = "darkgray",
-                "otice" = "#C45A11"
+                "CUBIC" = "#1b9e77",
+                "PRONOVA" = "#7570b3",
+                "CRDS" = "darkgray",
+                "OTICE" = "#C45A11"
         )
-        
+
         analyzer_shapes <- c(
-                "logas_tdlas" = 0,
-                "logas_ndir" = 1,
-                "crds" = 2,
-                "otice" = 15
+                "CUBIC" = 0,
+                "PRONOVA" = 1,
+                "CRDS" = 2,
+                "OTICE" = 15
         )
         
         all_analyzers <- unique(data$analyzer)
@@ -169,7 +178,7 @@ emierrorbarplot <- function(data, y = NULL) {
                         axis.title = element_text(size = 14),
                         axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
                         axis.text.y = element_text(hjust = 1, size = 12),
-                        strip.text.y.left = element_text(size = 14, vjust = 0.5),
+                        strip.text.y.left = element_text(size = 11, vjust = 0.5),
                         panel.border = element_rect(color = "black", fill = NA),
                         legend.position = "bottom",
                         legend.title = element_blank(),
@@ -186,6 +195,13 @@ emitrendplot <- function(data, y = NULL) {
         library(dplyr)
         library(ggplot2)
         library(scales)
+
+        analyzer_labels <- c(
+                "crds" = "CRDS",
+                "logas_ndir" = "PRONOVA",
+                "logas_tdlas" = "CUBIC",
+                "otice" = "OTICE"
+        )
         
         if ("var" %in% names(data) && !"variable" %in% names(data)) {
                 data <- data %>% rename(variable = var)
@@ -236,24 +252,26 @@ emitrendplot <- function(data, y = NULL) {
         
         summary_data <- summary_data %>%
                 mutate(
+                        analyzer = as.character(analyzer),
+                        analyzer = recode(analyzer, !!!analyzer_labels, .default = analyzer),
                         facet_label = factor(
                                 facet_labels[as.character(variable)],
                                 levels = facet_labels[y]
                         )
                 )
-        
+
         analyzer_colors <- c(
-                "logas_tdlas" = "#1b9e77",
-                "logas_ndir" = "#7570b3",
-                "crds" = "darkgray",
-                "otice" = "#C45A11"
+                "CUBIC" = "#1b9e77",
+                "PRONOVA" = "#7570b3",
+                "CRDS" = "darkgray",
+                "OTICE" = "#C45A11"
         )
-        
+
         analyzer_shapes <- c(
-                "logas_tdlas" = 0,
-                "logas_ndir" = 1,
-                "crds" = 2,
-                "otice" = 15
+                "CUBIC" = 0,
+                "PRONOVA" = 1,
+                "CRDS" = 2,
+                "OTICE" = 15
         )
         
         all_analyzers <- unique(summary_data$analyzer)
@@ -296,7 +314,7 @@ emitrendplot <- function(data, y = NULL) {
                         axis.title = element_text(size = 14),
                         axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
                         axis.text.y = element_text(hjust = 1, size = 12),
-                        strip.text.y.left = element_text(size = 14, vjust = 0.5),
+                        strip.text.y.left = element_text(size = 11, vjust = 0.5),
                         panel.border = element_rect(color = "black", fill = NA),
                         legend.position = "bottom",
                         legend.title = element_blank(),

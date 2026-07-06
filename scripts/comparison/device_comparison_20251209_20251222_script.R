@@ -77,6 +77,14 @@ device_colors <- c(
   "otice" = "#C45A11"
 )
 
+device_labels <- c(
+  "crds" = "CRDS",
+  "logas_tdlas" = "CUBIC",
+  "logas_ndir" = "PRONOVA",
+  "otice" = "OTICE",
+  "otice_raw" = "OTICE raw"
+)
+
 # -----------------------------------------------------------------------------
 # Helper functions
 # -----------------------------------------------------------------------------
@@ -149,7 +157,11 @@ device_trend_plot <- function(data, y, title_text) {
   ggplot(plot_data, aes(x = DATE.TIME, y = value, color = analyzer, group = analyzer)) +
     geom_line(linewidth = 0.8, alpha = 0.95, na.rm = TRUE) +
     facet_grid(var ~ ., scales = "free_y", switch = "y") +
-    scale_color_manual(values = device_colors, drop = FALSE) +
+    scale_color_manual(
+      values = device_colors,
+      labels = device_labels[names(device_colors)],
+      drop = FALSE
+    ) +
     scale_x_datetime(
       limits = c(period_start, period_end),
       breaks = seq(period_start, period_end, by = "1 day"),
@@ -326,7 +338,10 @@ daily_summary <- emission_data |>
 write_csv(daily_summary, file.path(table_dir, "daily_summary_20251209_20251222.csv"))
 
 delta_summary_table <- bind_rows(crds_data, logas_ndir_data, logas_tdlas_data, otice_raw_data, otice_data) |>
-  mutate(analyzer = as.character(analyzer)) |>
+  mutate(
+    analyzer = as.character(analyzer),
+    analyzer = recode(analyzer, !!!device_labels, .default = analyzer)
+  ) |>
   pivot_longer(
     cols = c(delta_CO2, delta_CH4, delta_NH3),
     names_to = "variable",
@@ -345,7 +360,10 @@ delta_summary_table <- bind_rows(crds_data, logas_ndir_data, logas_tdlas_data, o
   arrange(variable, analyzer)
 
 precision_vs_crds_table <- bind_rows(crds_data, logas_ndir_data, logas_tdlas_data, otice_raw_data, otice_data) |>
-  mutate(analyzer = as.character(analyzer)) |>
+  mutate(
+    analyzer = as.character(analyzer),
+    analyzer = recode(analyzer, !!!device_labels, .default = analyzer)
+  ) |>
   pivot_longer(
     cols = c(delta_CO2, delta_CH4, delta_NH3),
     names_to = "variable",
@@ -354,12 +372,12 @@ precision_vs_crds_table <- bind_rows(crds_data, logas_ndir_data, logas_tdlas_dat
   select(DATE.HOUR, analyzer, variable, value) |>
   pivot_wider(names_from = analyzer, values_from = value) |>
   pivot_longer(
-    cols = any_of(c("logas_ndir", "logas_tdlas", "otice_raw", "otice")),
+    cols = any_of(c("PRONOVA", "CUBIC", "OTICE raw", "OTICE")),
     names_to = "compare_analyzer",
     values_to = "compare_value"
   ) |>
-  filter(!is.na(crds), !is.na(compare_value)) |>
-  mutate(diff_vs_crds = compare_value - crds) |>
+  filter(!is.na(CRDS), !is.na(compare_value)) |>
+  mutate(diff_vs_crds = compare_value - CRDS) |>
   group_by(compare_analyzer, variable) |>
   summarise(
     paired_hours = n(),
