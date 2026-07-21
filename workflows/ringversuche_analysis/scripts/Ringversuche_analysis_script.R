@@ -82,12 +82,55 @@ ANALYSER_SHAPES <- c(
 )
 ANALYSER_LEGEND_ORDER <- c("CRDS.1", "CRDS.2", "CRDS.3",
                            "FTIR.1", "FTIR.2", "FTIR.3", "FTIR.4", "FTIR.4_old")
+LAB_CODE_FROM_SOURCE <- c("ATB" = "Lab_A", "LUFA" = "Lab_B", "UB" = "Lab_C", "MBBM" = "Lab_D", "ANECO" = "Lab_E")
+LAB_ORDER <- c("Lab_A", "Lab_B", "Lab_C", "Lab_D", "Lab_E")
+LAB_BASELINE <- "Lab_C"
+LAB_REPRESENTATIVE_ANALYSERS <- c(
+        "Lab_A" = "CRDS.1",
+        "Lab_B" = "CRDS.2",
+        "Lab_C" = "CRDS.3",
+        "Lab_D" = "FTIR.3",
+        "Lab_E" = "FTIR.4"
+)
+LAB_COLORS <- c(
+        "Lab_A" = unname(ANALYSER_COLORS["CRDS.1"]),
+        "Lab_B" = unname(ANALYSER_COLORS["CRDS.2"]),
+        "Lab_C" = unname(ANALYSER_COLORS["CRDS.3"]),
+        "Lab_D" = unname(ANALYSER_COLORS["FTIR.3"]),
+        "Lab_E" = unname(ANALYSER_COLORS["FTIR.4"])
+)
+
+LAB_SHAPES <- c(
+        "Lab_A" = unname(ANALYSER_SHAPES["CRDS.1"]),
+        "Lab_B" = unname(ANALYSER_SHAPES["CRDS.2"]),
+        "Lab_C" = unname(ANALYSER_SHAPES["CRDS.3"]),
+        "Lab_D" = unname(ANALYSER_SHAPES["FTIR.3"]),
+        "Lab_E" = unname(ANALYSER_SHAPES["FTIR.4"])
+)
+PLOT_COLORS <- c(ANALYSER_COLORS, LAB_COLORS, "Input" = "black")
+PLOT_SHAPES <- c(ANALYSER_SHAPES, LAB_SHAPES, "Input" = 16)
 analyser_aes <- function(x, lookup, default) {
         present <- unique(as.character(x))
         out     <- setNames(rep(default, length(present)), present)
         known   <- intersect(present, names(lookup))
         out[known] <- lookup[known]
         out
+}
+plot_group_levels <- function(x, include_input = FALSE, include_old = FALSE) {
+        x_chr <- unique(as.character(x))
+        if (all(x_chr %in% c(LAB_ORDER, if (include_input) "Input"))) {
+                lev <- LAB_ORDER
+                if (include_input) lev <- c(lev, "Input")
+                return(lev)
+        }
+        lev <- c("CRDS.1", "CRDS.2", "CRDS.3", "FTIR.1", "FTIR.2", "FTIR.3", "FTIR.4")
+        if (include_old) lev <- c(lev, "FTIR.4_old")
+        if (include_input) lev <- c(lev, "Input")
+        lev
+}
+plot_group_labels <- function(x, include_input = FALSE, include_old = FALSE) {
+        lev <- plot_group_levels(x, include_input = include_input, include_old = include_old)
+        setNames(lev, lev)
 }
 
 #### V10 ANALYSIS CONFIG                                                       ####
@@ -286,7 +329,8 @@ ba_relative_stats <- function(x, y) {
 .is_signed_var <- function(v) any(grepl("^delta_", v))
 
 emitrendplot <- function(data, y = NULL, location_filter = NULL,
-                         plot_err = FALSE, x = "DATE.TIME") {
+                         plot_err = FALSE, x = "DATE.TIME",
+                         location_label_map = LOC_LABELS) {
         if (!is.null(location_filter)) data <- data %>% filter(location %in% location_filter)
         if (!is.null(y))               data <- data %>% filter(var %in% y)
         value_col <- if (plot_err && "pct_err" %in% names(data)) "pct_err" else "value"
@@ -300,8 +344,9 @@ emitrendplot <- function(data, y = NULL, location_filter = NULL,
         labels <- if (plot_err) VAR_LABELS_PLAIN else VAR_LABELS_UNITS
         summary_data <- summary_data %>%
                 mutate(facet_label = factor(labels[as.character(var)], levels = labels[y]))
-        col_vals   <- analyser_aes(summary_data$analyser, ANALYSER_COLORS, "black")
-        shape_vals <- analyser_aes(summary_data$analyser, ANALYSER_SHAPES, 16)
+        col_vals   <- analyser_aes(summary_data$analyser, PLOT_COLORS, "black")
+        shape_vals <- analyser_aes(summary_data$analyser, PLOT_SHAPES, 16)
+        grp_labels <- plot_group_labels(summary_data$analyser)
         signed <- .is_signed_var(y)
         p <- ggplot(summary_data,
                     aes(x = .data[[x]], y = mean_val,
@@ -322,7 +367,7 @@ emitrendplot <- function(data, y = NULL, location_filter = NULL,
                         facet_grid(facet_label ~ location, scales = "free_y", switch = "y",
                                    labeller = labeller(
                                            facet_label = label_parsed,
-                                           location    = as_labeller(LOC_LABELS, label_parsed)))) +
+                                           location    = as_labeller(location_label_map, label_parsed)))) +
                 scale_y_continuous(breaks = scales::pretty_breaks(n = 6),
                                    labels = scales::label_number(accuracy = 0.1, big.mark = "")) +
                 labs(x = NULL, y = NULL) +
@@ -347,7 +392,8 @@ emitrendplot <- function(data, y = NULL, location_filter = NULL,
         p
 }
 
-emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE) {
+emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE,
+                       location_label_map = LOC_LABELS) {
         if (!is.null(location_filter)) data <- data %>% filter(location %in% location_filter)
         if (!is.null(y))               data <- data %>% filter(var %in% y)
         value_col <- if (plot_err) "pct_err" else "value"
@@ -363,12 +409,14 @@ emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE)
         labels <- if (plot_err) VAR_LABELS_PLAIN else VAR_LABELS_UNITS
         data <- data %>%
                 mutate(variable_label = factor(labels[as.character(var)], levels = labels[y]))
-        col_vals <- analyser_aes(data$analyser, ANALYSER_COLORS, "black")
+        col_vals <- analyser_aes(data$analyser, PLOT_COLORS, "black")
+        grp_labels <- plot_group_labels(data$analyser)
         signed <- .is_signed_var(y)
         p <- ggplot(data, aes(x = analyser, y = .data[[value_col]], color = analyser)) +
                 geom_boxplot(outlier.shape = NA, fill = NA, linewidth = 0.6) +
                 geom_jitter(width = 0.12, alpha = 0.22, size = 0.8) +
-                scale_color_manual(values = col_vals) +
+                scale_color_manual(values = col_vals, labels = grp_labels, drop = FALSE) +
+                scale_x_discrete(labels = grp_labels, drop = FALSE) +
                 # Hide the redundant column strip when only one location is shown.
                 (if (length(unique(data$location)) <= 1)
                         facet_grid(variable_label ~ ., scales = "free_y", switch = "y",
@@ -377,8 +425,8 @@ emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE)
                         facet_grid(variable_label ~ location, scales = "free_y", switch = "y",
                                    labeller = labeller(
                                            variable_label = label_parsed,
-                                           location       = as_labeller(LOC_LABELS, label_parsed)))) +
-                scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
+                                           location       = as_labeller(location_label_map, label_parsed)))) +
+                scale_y_continuous(breaks = scales::pretty_breaks(n = 6),
                                    labels = scales::label_number(accuracy = 0.1, big.mark = "")) +
                 labs(x = NULL, y = NULL) +
                 theme_classic() +
@@ -392,6 +440,71 @@ emiboxplot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE)
                       plot.title = element_text(hjust = 0.5)) +
                 guides(color = guide_legend(nrow = 1))
         if (signed) p <- p + geom_hline(yintercept = 0, color = "grey60", linewidth = 0.3)
+        p
+}
+
+emimean_ci_plot <- function(data, y = NULL, location_filter = NULL, plot_err = FALSE,
+                            location_label_map = LOC_LABELS) {
+        if (!is.null(location_filter)) data <- data %>% filter(location %in% location_filter)
+        if (!is.null(y))               data <- data %>% filter(var %in% y)
+        value_col <- if (plot_err && "pct_err" %in% names(data)) "pct_err" else "value"
+
+        summary_data <- data %>%
+                group_by(location, analyser, var) %>%
+                summarise(
+                        mean_val = mean(.data[[value_col]], na.rm = TRUE),
+                        n_val    = sum(is.finite(.data[[value_col]])),
+                        sd_val   = sd(.data[[value_col]], na.rm = TRUE),
+                        se_val   = sd_val / sqrt(n_val),
+                        ci_low   = mean_val - 1.96 * se_val,
+                        ci_high  = mean_val + 1.96 * se_val,
+                        .groups  = "drop"
+                ) %>%
+                filter(is.finite(mean_val))
+
+        labels <- if (plot_err) VAR_LABELS_PLAIN else VAR_LABELS_UNITS
+        summary_data <- summary_data %>%
+                mutate(
+                        variable_label = factor(labels[as.character(var)], levels = labels[y]),
+                        analyser = factor(as.character(analyser),
+                                          levels = plot_group_levels(analyser))
+                )
+
+        col_vals   <- analyser_aes(summary_data$analyser, PLOT_COLORS, "black")
+        shape_vals <- analyser_aes(summary_data$analyser, PLOT_SHAPES, 16)
+        grp_labels <- plot_group_labels(summary_data$analyser)
+        signed <- .is_signed_var(y)
+
+        p <- ggplot(summary_data, aes(x = analyser, y = mean_val, colour = analyser, shape = analyser)) +
+                geom_errorbar(aes(ymin = ci_low, ymax = ci_high),
+                              width = 0.16, linewidth = 0.7, na.rm = TRUE) +
+                geom_point(size = 2.4, na.rm = TRUE) +
+                scale_color_manual(values = col_vals, labels = grp_labels, drop = FALSE) +
+                scale_shape_manual(values = shape_vals, labels = grp_labels, drop = FALSE) +
+                scale_x_discrete(labels = grp_labels, drop = FALSE) +
+                (if (length(unique(summary_data$location)) <= 1)
+                        facet_grid(variable_label ~ ., scales = "free_y", switch = "y",
+                                   labeller = labeller(variable_label = label_parsed))
+                 else
+                        facet_grid(variable_label ~ location, scales = "free_y", switch = "y",
+                                   labeller = labeller(
+                                           variable_label = label_parsed,
+                                           location       = as_labeller(location_label_map, label_parsed)))) +
+                scale_y_continuous(breaks = scales::pretty_breaks(n = 6),
+                                   labels = scales::label_number(accuracy = 0.1, big.mark = "")) +
+                labs(x = NULL, y = NULL) +
+                theme_classic() +
+                theme(text = element_text(size = 15),
+                      axis.text.x = element_text(angle = 35, hjust = 1, size = 11),
+                      axis.text.y = element_text(size = 12),
+                      strip.text.y.left = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 13),
+                      strip.text.x = element_text(size = 12),
+                      panel.border = element_rect(color = "black", fill = NA),
+                      legend.position = "bottom", legend.title = element_blank(),
+                      plot.title = element_text(hjust = 0.5)) +
+                guides(color = guide_legend(nrow = 1), shape = guide_legend(nrow = 1))
+
+        if (signed) p <- p + geom_hline(yintercept = 0, color = "grey60", linewidth = 0.3)
         else        p <- p + coord_cartesian(ylim = c(0, NA))
         p
 }
@@ -401,7 +514,12 @@ hourly_dataset_summary_plot <- function(emission_csv, output_file, var_order,
         hour_order <- 0:23
 
         raw_emission <- readr::read_csv(emission_csv, show_col_types = FALSE)
-        if (!include_ftir4_old) {
+        if (!"lab_code" %in% names(raw_emission) && "lab" %in% names(raw_emission)) {
+                raw_emission <- raw_emission %>%
+                        mutate(lab_code = recode(lab, !!!LAB_CODE_FROM_SOURCE))
+        }
+        group_var <- if ("lab_code" %in% names(raw_emission)) "lab_code" else "analyser"
+        if (!include_ftir4_old && "analyser" %in% names(raw_emission)) {
                 raw_emission <- raw_emission %>% filter(analyser != "FTIR.4_old")
         }
 
@@ -417,21 +535,23 @@ hourly_dataset_summary_plot <- function(emission_csv, output_file, var_order,
                         dataset = recode(suffix, "N" = "Outdoor_NE", "S" = "Outdoor_SW"),
                         value = as.character(value)
                 ) %>%
-                select(hour_num, analyser, dataset, var, value)
+                mutate(group_id = .data[[group_var]]) %>%
+                select(hour_num, group_id, dataset, var, value)
 
         shared_inputs <- readr::read_csv(emission_csv, show_col_types = FALSE) %>%
+                {if (!"lab_code" %in% names(.) && "lab" %in% names(.)) mutate(., lab_code = recode(lab, !!!LAB_CODE_FROM_SOURCE)) else .} %>%
                 mutate(hour_num = as.integer(hour)) %>%
                 distinct(DATE.TIME, hour_num, n_dairycows_in, temp_N, wd_mst, ws_mst) %>%
                 rename(n_dairycows = n_dairycows_in, temp = temp_N) %>%
                 tidyr::crossing(dataset = c("Outdoor_NE", "Outdoor_SW")) %>%
-                mutate(analyser = "Input") %>%
+                mutate(group_id = "Input") %>%
                 pivot_longer(
                         cols = c(n_dairycows, temp, wd_mst, ws_mst),
                         names_to = "var",
                         values_to = "value"
                 ) %>%
                 mutate(value = as.character(value)) %>%
-                select(hour_num, analyser, dataset, var, value)
+                select(hour_num, group_id, dataset, var, value)
 
         all_long <- bind_rows(derived_long, shared_inputs) %>%
                 filter(var %in% var_order, hour_num %in% hour_order)
@@ -439,10 +559,14 @@ hourly_dataset_summary_plot <- function(emission_csv, output_file, var_order,
         numeric_summary <- all_long %>%
                 mutate(value_num = suppressWarnings(as.numeric(value))) %>%
                 filter(is.finite(value_num)) %>%
-                group_by(dataset, var, analyser, hour_num) %>%
+                group_by(dataset, var, group_id, hour_num) %>%
                 summarise(
                         mean_val = mean(value_num, na.rm = TRUE),
-                        se_val   = sd(value_num, na.rm = TRUE) / sqrt(sum(is.finite(value_num))),
+                        n_val    = sum(is.finite(value_num)),
+                        sd_val   = sd(value_num, na.rm = TRUE),
+                        se_val   = sd_val / sqrt(n_val),
+                        ci_low   = mean_val - 1.96 * se_val,
+                        ci_high  = mean_val + 1.96 * se_val,
                         .groups  = "drop"
                 )
 
@@ -456,14 +580,15 @@ hourly_dataset_summary_plot <- function(emission_csv, output_file, var_order,
                                              levels = VAR_LABELS_UNITS[var_order]),
                         dataset_label = factor(LOC_DATASET_LABELS[dataset],
                                                levels = LOC_DATASET_LABELS[c("Outdoor_NE", "Outdoor_SW")]),
-                        analyser = factor(analyser,
-                                          levels = c(ANALYSER_LEGEND_ORDER, "Input"))
+                        group_id = factor(as.character(group_id),
+                                          levels = plot_group_levels(group_id, include_input = TRUE,
+                                                                     include_old = include_ftir4_old))
                 )
 
-        colour_vals <- analyser_aes(summary_data$analyser,
-                                    c(ANALYSER_COLORS, "Input" = "black"),
-                                    "black")
-        shape_vals <- analyser_aes(summary_data$analyser, ANALYSER_SHAPES, 16)
+        colour_vals <- analyser_aes(summary_data$group_id, PLOT_COLORS, "black")
+        shape_vals <- analyser_aes(summary_data$group_id, PLOT_SHAPES, 16)
+        grp_labels <- plot_group_labels(summary_data$group_id, include_input = TRUE,
+                                        include_old = include_ftir4_old)
 
         numeric_data <- summary_data
 
@@ -471,19 +596,19 @@ hourly_dataset_summary_plot <- function(emission_csv, output_file, var_order,
                 geom_line(
                         data = numeric_data,
                         aes(x = hour_num, y = mean_val,
-                            colour = analyser, group = analyser),
+                            colour = group_id, group = group_id),
                         linewidth = 0.45, alpha = 0.75, na.rm = TRUE
                 ) +
                 geom_point(
                         data = numeric_data,
                         aes(x = hour_num, y = mean_val,
-                            colour = analyser, shape = analyser, group = analyser),
+                            colour = group_id, shape = group_id, group = group_id),
                         size = 1.0, na.rm = TRUE
                 ) +
                 geom_errorbar(
                         data = numeric_data,
-                        aes(x = hour_num, ymin = mean_val - se_val, ymax = mean_val + se_val,
-                            colour = analyser, group = analyser),
+                        aes(x = hour_num, ymin = ci_low, ymax = ci_high,
+                            colour = group_id, group = group_id),
                         width = 0.18, linewidth = 0.30, na.rm = TRUE
                 ) +
                 facet_grid(facet_label ~ dataset_label,
@@ -491,15 +616,15 @@ hourly_dataset_summary_plot <- function(emission_csv, output_file, var_order,
                            switch = "y",
                            labeller = labeller(facet_label = label_parsed,
                                                dataset_label = label_parsed)) +
-                scale_colour_manual(values = colour_vals) +
-                scale_shape_manual(values = shape_vals) +
+                scale_colour_manual(values = colour_vals, labels = grp_labels, drop = FALSE) +
+                scale_shape_manual(values = shape_vals, labels = grp_labels, drop = FALSE) +
                 scale_x_continuous(
                         breaks = hour_order,
                         labels = sprintf("%02d:00", hour_order),
                         expand = expansion(mult = c(0.01, 0.01))
                 ) +
                 scale_y_continuous(
-                        breaks = scales::pretty_breaks(n = 5),
+                        breaks = scales::pretty_breaks(n = 6),
                         labels = scales::label_number(accuracy = 0.1, big.mark = "")
                 ) +
                 labs(x = NULL, y = NULL, colour = NULL, shape = NULL) +
@@ -531,7 +656,12 @@ hourly_concentration_summary_plot <- function(emission_csv, output_file,
         var_order <- c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3")
 
         conc_long <- readr::read_csv(emission_csv, show_col_types = FALSE)
-        if (!include_ftir4_old) {
+        if (!"lab_code" %in% names(conc_long) && "lab" %in% names(conc_long)) {
+                conc_long <- conc_long %>%
+                        mutate(lab_code = recode(lab, !!!LAB_CODE_FROM_SOURCE))
+        }
+        group_var <- if ("lab_code" %in% names(conc_long)) "lab_code" else "analyser"
+        if (!include_ftir4_old && "analyser" %in% names(conc_long)) {
                 conc_long <- conc_long %>% filter(analyser != "FTIR.4_old")
         }
 
@@ -547,16 +677,21 @@ hourly_concentration_summary_plot <- function(emission_csv, output_file,
                 ) %>%
                 mutate(
                         location = recode(suffix, "in" = "Indoor", "N" = "Outdoor_NE", "S" = "Outdoor_SW"),
-                        value = as.numeric(value)
+                        value = as.numeric(value),
+                        group_id = .data[[group_var]]
                 ) %>%
                 filter(location %in% location_keep,
                        var %in% var_order,
                        is.finite(value),
                        hour_num %in% hour_order) %>%
-                group_by(location, var, analyser, hour_num) %>%
+                group_by(location, var, group_id, hour_num) %>%
                 summarise(
                         mean_val = mean(value, na.rm = TRUE),
-                        se_val = sd(value, na.rm = TRUE) / sqrt(sum(is.finite(value))),
+                        n_val = sum(is.finite(value)),
+                        sd_val = sd(value, na.rm = TRUE),
+                        se_val = sd_val / sqrt(n_val),
+                        ci_low = mean_val - 1.96 * se_val,
+                        ci_high = mean_val + 1.96 * se_val,
                         .groups = "drop"
                 ) %>%
                 mutate(
@@ -564,19 +699,21 @@ hourly_concentration_summary_plot <- function(emission_csv, output_file,
                                              levels = VAR_LABELS_UNITS[var_order]),
                         location_label = factor(LOC_LABELS[location],
                                                 levels = LOC_LABELS[location_keep]),
-                        analyser = factor(analyser,
-                                          levels = ANALYSER_LEGEND_ORDER)
+                        group_id = factor(as.character(group_id),
+                                          levels = plot_group_levels(group_id,
+                                                                     include_old = include_ftir4_old))
                 )
 
-        colour_vals <- analyser_aes(conc_long$analyser, ANALYSER_COLORS, "black")
-        shape_vals <- analyser_aes(conc_long$analyser, ANALYSER_SHAPES, 16)
+        colour_vals <- analyser_aes(conc_long$group_id, PLOT_COLORS, "black")
+        shape_vals <- analyser_aes(conc_long$group_id, PLOT_SHAPES, 16)
+        grp_labels <- plot_group_labels(conc_long$group_id, include_old = include_ftir4_old)
 
         p <- ggplot(conc_long,
                     aes(x = hour_num, y = mean_val,
-                        colour = analyser, shape = analyser, group = analyser)) +
+                        colour = group_id, shape = group_id, group = group_id)) +
                 geom_line(linewidth = 0.45, alpha = 0.75, na.rm = TRUE) +
                 geom_point(size = 1.0, na.rm = TRUE) +
-                geom_errorbar(aes(ymin = mean_val - se_val, ymax = mean_val + se_val),
+                geom_errorbar(aes(ymin = ci_low, ymax = ci_high),
                               width = 0.18, linewidth = 0.30, na.rm = TRUE) +
                 (if (length(unique(conc_long$location_label)) <= 1)
                         facet_grid(facet_label ~ location_label,
@@ -589,15 +726,15 @@ hourly_concentration_summary_plot <- function(emission_csv, output_file,
                                    switch = "y",
                                    labeller = labeller(facet_label = label_parsed,
                                                        location_label = label_parsed))) +
-                scale_colour_manual(values = colour_vals) +
-                scale_shape_manual(values = shape_vals) +
+                scale_colour_manual(values = colour_vals, labels = grp_labels, drop = FALSE) +
+                scale_shape_manual(values = shape_vals, labels = grp_labels, drop = FALSE) +
                 scale_x_continuous(
                         breaks = hour_order,
                         labels = sprintf("%02d:00", hour_order),
                         expand = expansion(mult = c(0.01, 0.01))
                 ) +
                 scale_y_continuous(
-                        breaks = scales::pretty_breaks(n = 5),
+                        breaks = scales::pretty_breaks(n = 6),
                         labels = scales::label_number(accuracy = 0.1, big.mark = "")
                 ) +
                 labs(x = NULL, y = NULL, colour = NULL, shape = NULL) +
@@ -617,7 +754,8 @@ hourly_concentration_summary_plot <- function(emission_csv, output_file,
                 ) +
                 guides(colour = guide_legend(nrow = 1), shape = guide_legend(nrow = 1))
 
-        plot_width <- if (length(unique(conc_long$location_label)) <= 1) 8.8 else 10.2
+        n_loc <- length(unique(conc_long$location_label))
+        plot_width <- if (n_loc <= 1) 8.8 else if (n_loc == 2) 10.2 else 13.2
         ggsave(output_file, p, width = plot_width, height = 6.2, units = "in", dpi = 300, bg = "white")
         p
 }
@@ -728,14 +866,15 @@ bland_altman_plot <- function(data, var_filter, analyser_pair,
 }
 
 #### 0.  Paths, output directories                                            ####
-base_dir   <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
-data_dir   <- file.path(base_dir, "clean_data/Version_9/long_format")
-clean_dir  <- file.path(base_dir, "clean_data/Version_9")
-meta_dir   <- file.path(base_dir, "meta_data")
-tables_dir <- file.path(base_dir, "result_data/tables/Version_12")
-plots_dir  <- file.path(base_dir, "result_data/plots/Version_12")
-report_dir <- file.path(base_dir, "result_data/text_reports/Version_12")
-for (d in c(tables_dir, plots_dir, report_dir))
+base_dir       <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
+data_dir       <- file.path(base_dir, "clean_data/Version_9/long_format")
+clean_dir      <- file.path(base_dir, "clean_data/Version_9")
+clean_out_dir  <- file.path(base_dir, "clean_data/Version_15")
+meta_dir       <- file.path(base_dir, "meta_data")
+tables_dir     <- file.path(base_dir, "result_data/tables/Version_15")
+plots_dir      <- file.path(base_dir, "result_data/plots/Version_15")
+report_dir     <- file.path(base_dir, "result_data/text_reports/Version_15")
+for (d in c(clean_out_dir, tables_dir, plots_dir, report_dir))
         dir.create(d, showWarnings = FALSE, recursive = TRUE)
 
 start_time <- as.POSIXct("2025-04-08 12:00:00", tz = "UTC")
@@ -957,7 +1096,9 @@ T_RH_HOBO <- read.csv(file.path(meta_dir, "HOBO_Temp_RH/2025/20250408-20250630_H
 
 wind_data <- read.csv(file.path(meta_dir, "USA_mast_wind/20240101_20250825_USA_mast_16_hourly_uvw_wd_ws.csv"),
                       stringsAsFactors = FALSE) %>%
-        mutate(DATE.TIME = as.POSIXct(datetime_hour, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")) %>%
+        # The hourly mast file is stamped 2 h ahead of the raw UTC u/v series
+        # during the April 2025 campaign, so it is shifted back before joining.
+        mutate(DATE.TIME = as.POSIXct(datetime_hour, format = "%Y-%m-%d %H:%M:%S", tz = "UTC") - 2 * 3600) %>%
         filter(DATE.TIME >= start_time & DATE.TIME <= end_time) %>%
         rename(wd_mst = wd, ws_mst = ws) %>%
         select(DATE.TIME, wd_mst, ws_mst)
@@ -1157,42 +1298,16 @@ animal_summary <- animal_data %>%
 write_excel_csv(animal_summary, file.path(tables_dir, "animal_count_summary.csv"))
 
 
-#### 6.  Concentration plots WITH FTIR.4_old (justifies its drop)             ####
-c_trend_plot <- emitrendplot(emission_reshaped, y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
-c_boxplot    <- emiboxplot  (emission_reshaped, y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
+#### 6.  Lab-level concentration plots                                        ####
+c_trend_plot <- emitrendplot(emission_reshaped %>% filter(analyser != "FTIR.4_old"),
+                             y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
+c_boxplot    <- emiboxplot  (emission_reshaped %>% filter(analyser != "FTIR.4_old"),
+                             y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
 ggsave(file.path(plots_dir, "c_trend_plot.png"), c_trend_plot, width = 14, height = 6.8, dpi = 300)
 ggsave(file.path(plots_dir, "c_boxplot.png"),    c_boxplot,    width = 14, height = 6.8, dpi = 300)
 
 #### 7.  FTIR.4 vs FTIR.4_old ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â spectral-library re-evaluation check (R2.7)   ####
-ftir_old <- input_combined %>% filter(analyser == "FTIR.4_old")
-ftir_new <- input_combined %>% filter(analyser == "FTIR.4")
-lib_pair <- function(g, l) {
-        col <- paste0(g, "_ppm_", l)
-        inner_join(tibble(DATE.TIME = ftir_old$DATE.TIME, v_old = ftir_old[[col]]),
-                   tibble(DATE.TIME = ftir_new$DATE.TIME, v_new = ftir_new[[col]]),
-                   by = "DATE.TIME") %>%
-                filter(complete.cases(v_old, v_new))
-}
-lib_compare <- map_dfr(gases, function(g) {
-        map_dfr(c("in", "N", "S"), function(l) {
-                j <- lib_pair(g, l)
-                if (nrow(j) < 3) return(NULL)
-                dem <- deming_fit(j$v_old, j$v_new)
-                tibble(gas = g, location = unname(loc_from_suffix[l]),
-                       n   = nrow(j),
-                       mean_old = mean(j$v_old), mean_new = mean(j$v_new),
-                       mean_diff = mean(j$v_new - j$v_old),
-                       RPD_pct = 100 * mean(j$v_new - j$v_old) /
-                                 mean((j$v_old + j$v_new) / 2),
-                       RMSD = sqrt(mean((j$v_new - j$v_old)^2)),
-                       deming_intercept = unname(dem["intercept"]),
-                       deming_slope     = unname(dem["slope"]),
-                       CCC = DescTools::CCC(j$v_old, j$v_new)$rho.c[, "est"],
-                       p_wilcox = suppressWarnings(
-                               wilcox.test(j$v_old, j$v_new, paired = TRUE)$p.value))
-        })
-})
-write_excel_csv(lib_compare, file.path(tables_dir, "FTIR4_old_vs_new_comparison.csv"))
+# FTIR.4_old is excluded entirely from the Version_14 manuscript workflow.
 
 
 
@@ -1249,6 +1364,10 @@ analysers          <- sort(unique(input_combined_v$analyser))
 conc_vars          <- c("CO2_mgm3","CH4_mgm3","NH3_mgm3")
 delta_vars         <- c("delta_CO2","delta_CH4","delta_NH3")
 qe_vars            <- c("Q_vent","e_CH4_ghLU","e_NH3_ghLU")
+
+write_excel_csv(emission_result_v,  file.path(clean_out_dir, "20250408-15_emission_result_noFTIR4old.csv"))
+write_excel_csv(emission_reshaped_v, file.path(clean_out_dir, "20250408-15_ringversuche_emission_reshaped_noFTIR4old.csv"))
+write_excel_csv(input_combined_v,   file.path(clean_out_dir, "20250408-15_input_combined_noFTIR4old.csv"))
 
 #### 9.7 Delta-quality diagnostics                                           ####
 delta_quality <- emission_result_v %>%
@@ -1378,26 +1497,7 @@ line_class_summary <- ne_sw_by_sector %>%
                   .groups = "drop")
 write_excel_csv(line_class_summary, file.path(tables_dir, "outdoor_line_class_summary.csv"))
 
-# Step E: bar plot of RPD vs wind sector to make the contamination pattern
-# easy to read for the manuscript.
-ne_sw_rpd_sector <- ne_sw_by_sector %>%
-        select(gas, location, wind_sector, mean_ppm) %>%
-        pivot_wider(names_from = location, values_from = mean_ppm) %>%
-        mutate(RPD_pct = 100 * (Outdoor_NE - Outdoor_SW) /
-                        ((Outdoor_NE + Outdoor_SW) / 2)) %>%
-        left_join(sector_class, by = "wind_sector")
-rpd_sector_plot <- ggplot(ne_sw_rpd_sector, aes(x = wind_sector, y = RPD_pct, fill = gas)) +
-        geom_col(position = position_dodge(width = 0.8), width = 0.7,
-                 color = "black", linewidth = 0.2) +
-        geom_hline(yintercept = 0, color = "grey50") +
-        facet_wrap(~ gas, ncol = 1, scales = "free_y") +
-        scale_fill_brewer(palette = "Dark2", guide = "none") +
-        labs(title = "Relative percentage difference NE - SW by wind sector",
-             subtitle = "Positive = NE higher than SW; negative = SW higher than NE",
-             x = "Wind sector (mast)", y = "RPD (%)") +
-        theme_bw(base_size = 12)
-ggsave(file.path(plots_dir, "outdoor_NE_vs_SW_RPD_by_sector.png"), rpd_sector_plot,
-       width = 10, height = 9, dpi = 300, bg = "white")
+# The manuscript no longer uses the standalone NE-SW sector RPD bar plot.
 
 # Outdoor concentration plot by wind sector and analyser (mg m-3), excluding
 # the indoor line and the superseded FTIR.4_old diagnostic series.
@@ -1636,6 +1736,85 @@ write_excel_csv(single_long, file.path(tables_dir,
                                        sprintf("emission_long_single_outdoor_%s.csv",
                                                RETAINED_OUTDOOR)))
 
+filter_lab_representatives <- function(df) {
+        df %>%
+                filter(!is.na(lab), !is.na(analyser), analyser != "FTIR.4_old") %>%
+                mutate(lab_code = recode(lab, !!!LAB_CODE_FROM_SOURCE),
+                       analyser = as.character(analyser)) %>%
+                filter(!is.na(lab_code),
+                       analyser == unname(LAB_REPRESENTATIVE_ANALYSERS[as.character(lab_code)])) %>%
+                mutate(lab_code = factor(lab_code, levels = LAB_ORDER))
+}
+
+collapse_to_lab_level <- function(df_wide) {
+        mean_or_na <- function(x) if (all(is.na(x))) NA_real_ else mean(x, na.rm = TRUE)
+        df_wide %>%
+                filter_lab_representatives() %>%
+                group_by(DATE.TIME, lab_code) %>%
+                summarise(across(where(is.numeric), mean_or_na), .groups = "drop") %>%
+                mutate(lab_code = factor(lab_code, levels = LAB_ORDER))
+}
+
+wide_to_long_for_group <- function(df_wide, group_col = "lab_code") {
+        group_sym <- rlang::sym(group_col)
+        df_wide %>%
+                select(DATE.TIME, !!group_sym,
+                       CO2_mgm3_in, CH4_mgm3_in, NH3_mgm3_in,
+                       CO2_mgm3_N, CH4_mgm3_N, NH3_mgm3_N,
+                       CO2_mgm3_S, CH4_mgm3_S, NH3_mgm3_S,
+                       delta_CO2_N, delta_CH4_N, delta_NH3_N,
+                       delta_CO2_S, delta_CH4_S, delta_NH3_S,
+                       Q_vent_N, e_CH4_ghLU_N, e_NH3_ghLU_N,
+                       Q_vent_S, e_CH4_ghLU_S, e_NH3_ghLU_S) %>%
+                pivot_longer(cols = -c(DATE.TIME, !!group_sym),
+                             names_to = "raw_var", values_to = "value") %>%
+                mutate(
+                        location = case_when(
+                                str_detect(raw_var, "_in$") ~ "Indoor",
+                                str_detect(raw_var, "_N$")  ~ "Outdoor_NE",
+                                str_detect(raw_var, "_S$")  ~ "Outdoor_SW",
+                                TRUE                        ~ NA_character_
+                        ),
+                        var = str_remove(raw_var, "_(in|N|S)$")
+                ) %>%
+                rename(group_id = !!group_sym) %>%
+                select(DATE.TIME, group_id, location, var, value) %>%
+                mutate(group_id = factor(as.character(group_id), levels = LAB_ORDER))
+}
+
+emission_result_lab_v <- collapse_to_lab_level(emission_result_v)
+emission_result_lab_single <- collapse_to_lab_level(emission_result_single)
+lab_long_v <- wide_to_long_for_group(emission_result_lab_v)
+lab_plot_long <- lab_long_v %>%
+        rename(analyser = group_id) %>%
+        mutate(
+                analyser = factor(as.character(analyser), levels = LAB_ORDER),
+                day = factor(as.Date(DATE.TIME)),
+                hour = factor(format(as.POSIXct(DATE.TIME), "%H:%M"))
+        )
+lab_long_single <- single_long %>%
+        filter_lab_representatives() %>%
+        group_by(DATE.TIME, lab_code, location, var) %>%
+        summarise(value = if (all(is.na(value))) NA_real_ else mean(value, na.rm = TRUE),
+                  .groups = "drop") %>%
+        rename(analyser = lab_code) %>%
+        mutate(
+                analyser = factor(as.character(analyser), levels = LAB_ORDER),
+                day = factor(as.Date(DATE.TIME)),
+                hour = factor(format(as.POSIXct(DATE.TIME), "%H:%M"))
+        )
+write_excel_csv(emission_result_lab_v, file.path(tables_dir, "emission_result_lab_level.csv"))
+write_excel_csv(lab_long_v, file.path(tables_dir, "emission_long_lab_level.csv"))
+
+# Overwrite manuscript-facing concentration plots with the final lab-level
+# version once lab aggregation is available.
+c_trend_plot_lab <- emitrendplot(lab_plot_long, y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
+c_boxplot_lab <- emiboxplot(lab_plot_long, y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
+c_mean_ci_lab <- emimean_ci_plot(lab_plot_long, y = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"))
+ggsave(file.path(plots_dir, "c_trend_plot.png"), c_trend_plot_lab, width = 14, height = 6.8, dpi = 300)
+ggsave(file.path(plots_dir, "c_boxplot.png"), c_boxplot_lab, width = 14, height = 6.8, dpi = 300)
+ggsave(file.path(plots_dir, "c_mean_ci.png"), c_mean_ci_lab, width = 14, height = 6.8, dpi = 300)
+
 fit_repeated_measures_model <- function(df_long, vars, location_filter) {
         if (!requireNamespace("nlme", quietly = TRUE)) {
                 stop("Package 'nlme' is required for repeated-measures mixed models.")
@@ -1716,216 +1895,400 @@ fit_repeated_measures_model <- function(df_long, vars, location_filter) {
         )
 }
 
-mixed_model_sw <- fit_repeated_measures_model(
-        df_long = single_long,
-        vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-        location_filter = "Outdoor_SW"
-)
+# Mixed-model analyser-effect output was removed from the streamlined
+# manuscript workflow.
 
-write_excel_csv(
-        mixed_model_sw$anova,
-        file.path(tables_dir, "mixed_model_analyser_effect_Outdoor_SW_anova.csv")
-)
-write_excel_csv(
-        mixed_model_sw$fixed,
-        file.path(tables_dir, "mixed_model_analyser_effect_Outdoor_SW_fixed_effects.csv")
-)
-write_excel_csv(
-        mixed_model_sw$random,
-        file.path(tables_dir, "mixed_model_analyser_effect_Outdoor_SW_random_effects.csv")
-)
+safe_scale <- function(x) {
+        x_mean <- mean(x, na.rm = TRUE)
+        x_sd   <- sd(x, na.rm = TRUE)
+        if (!is.finite(x_sd) || x_sd == 0) {
+                return(rep(0, length(x)))
+        }
+        (x - x_mean) / x_sd
+}
 
-mixed_model_sw_report <- mixed_model_sw$anova %>%
-        filter(term == "analyser") %>%
-        mutate(
-                F_value = round(`F-value`, 3),
-                p_value = scales::pvalue(p_value, accuracy = 0.001)
-        ) %>%
-        transmute(
-                line = sprintf(
-                        "%s at %s: analyser fixed effect -> F(%s, %s) = %s, p = %s",
-                        recode(variable,
-                               "Q_vent" = "Q",
-                               "e_CH4_ghLU" = "eCH4",
-                               "e_NH3_ghLU" = "eNH3"),
-                        recode(location, "Outdoor_SW" = "Outdoor^SW"),
-                        numDF, denDF, F_value, p_value
+fit_driver_mixed_models <- function(df_wide, location_label = "Outdoor_SW") {
+        if (!requireNamespace("nlme", quietly = TRUE)) {
+                stop("Package 'nlme' is required for driver mixed models.")
+        }
+
+        base_input <- df_wide %>%
+                transmute(
+                        DATE.TIME = as.POSIXct(DATE.TIME, tz = "UTC"),
+                        time_id = factor(DATE.TIME),
+                        analyser = factor(analyser,
+                                          levels = c("CRDS.1","CRDS.2","CRDS.3",
+                                                     "FTIR.1","FTIR.2","FTIR.3","FTIR.4")),
+                        hour_factor = factor(sprintf("%02d", as.integer(hour)),
+                                             levels = sprintf("%02d", 0:23)),
+                        n_dairycows_in, temp_in, Y1_milk_prod, ws_mst,
+                        delta_CO2, delta_CH4, delta_NH3,
+                        Q_vent, e_CH4_ghLU, e_NH3_ghLU
+                ) %>%
+                mutate(
+                        n_dairycows_z = safe_scale(n_dairycows_in),
+                        temp_in_z = safe_scale(temp_in),
+                        Y1_milk_prod_z = safe_scale(Y1_milk_prod),
+                        ws_mst_z = safe_scale(ws_mst),
+                        delta_CO2_z = safe_scale(delta_CO2),
+                        delta_CH4_z = safe_scale(delta_CH4),
+                        delta_NH3_z = safe_scale(delta_NH3),
+                        Q_vent_z = safe_scale(Q_vent)
+                ) %>%
+                mutate(analyser = forcats::fct_drop(analyser))
+
+        model_specs <- list(
+                list(
+                        response = "Q_vent",
+                        rhs_terms = c("analyser", "hour_factor",
+                                      "delta_CO2_z", "n_dairycows_z",
+                                      "temp_in_z", "Y1_milk_prod_z", "ws_mst_z"),
+                        driver_terms = c("delta_CO2_z", "n_dairycows_z",
+                                         "temp_in_z", "Y1_milk_prod_z", "ws_mst_z")
+                ),
+                list(
+                        response = "e_CH4_ghLU",
+                        rhs_terms = c("analyser", "hour_factor",
+                                      "Q_vent_z", "delta_CH4_z",
+                                      "n_dairycows_z", "temp_in_z",
+                                      "Y1_milk_prod_z", "ws_mst_z"),
+                        driver_terms = c("Q_vent_z", "delta_CH4_z",
+                                         "n_dairycows_z", "temp_in_z",
+                                         "Y1_milk_prod_z", "ws_mst_z")
+                ),
+                list(
+                        response = "e_NH3_ghLU",
+                        rhs_terms = c("analyser", "hour_factor",
+                                      "Q_vent_z", "delta_NH3_z",
+                                      "n_dairycows_z", "temp_in_z",
+                                      "Y1_milk_prod_z", "ws_mst_z"),
+                        driver_terms = c("Q_vent_z", "delta_NH3_z",
+                                         "n_dairycows_z", "temp_in_z",
+                                         "Y1_milk_prod_z", "ws_mst_z")
                 )
-        ) %>%
-        pull(line)
-write_lines(
-        c(
-                "Repeated-measures mixed model: value ~ analyser + (1 | time_id)",
-                "Dataset: retained single-outdoor workflow (Outdoor^SW)",
-                mixed_model_sw_report
-        ),
-        file.path(report_dir, "mixed_model_analyser_effect_Outdoor_SW.txt")
-)
-
-mixed_model_sw_effects <- mixed_model_sw$fixed %>%
-        filter(term != "(Intercept)") %>%
-        mutate(
-                analyser = str_remove(term, "^analyser"),
-                conf_low = estimate - 1.96 * std_error,
-                conf_high = estimate + 1.96 * std_error
-        ) %>%
-        select(variable, location, analyser, estimate, std_error, conf_low, conf_high, p_value)
-
-mixed_model_sw_effects <- bind_rows(
-        tibble(
-                variable = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-                location = "Outdoor_SW",
-                analyser = "CRDS.1",
-                estimate = 0,
-                std_error = 0,
-                conf_low = 0,
-                conf_high = 0,
-                p_value = NA_real_
-        ),
-        mixed_model_sw_effects
-) %>%
-        mutate(
-                analyser = factor(analyser,
-                                  levels = c("CRDS.1","CRDS.2","CRDS.3",
-                                             "FTIR.1","FTIR.2","FTIR.3","FTIR.4")),
-                variable = factor(variable,
-                                  levels = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"))
         )
 
-mixed_model_sw_axis_guides <- mixed_model_sw_effects %>%
+        anova_rows <- list()
+        fixed_rows <- list()
+        std_rows <- list()
+        random_rows <- list()
+
+        for (spec in model_specs) {
+                needed_cols <- unique(c(spec$response, spec$driver_terms,
+                                        "DATE.TIME", "time_id", "analyser", "hour_factor"))
+                dat_v <- base_input %>%
+                        select(all_of(needed_cols)) %>%
+                        filter(if_all(all_of(c(spec$response, spec$driver_terms)), is.finite))
+
+                if (nrow(dat_v) == 0) next
+
+                fit_formula <- as.formula(
+                        paste(spec$response, "~", paste(spec$rhs_terms, collapse = " + "))
+                )
+
+                fit_v <- nlme::lme(
+                        fixed = fit_formula,
+                        random = ~1 | time_id,
+                        data = dat_v,
+                        na.action = na.omit,
+                        control = nlme::lmeControl(returnObject = TRUE)
+                )
+
+                aov_v <- as.data.frame(nlme::anova.lme(fit_v))
+                aov_v$term <- rownames(aov_v)
+                rownames(aov_v) <- NULL
+                names(aov_v) <- gsub("^p-value$", "p_value", names(aov_v))
+                anova_rows[[spec$response]] <- aov_v %>%
+                        as_tibble() %>%
+                        mutate(variable = spec$response, location = location_label, .before = 1) %>%
+                        select(variable, location, term, numDF, denDF, `F-value`, p_value)
+
+                fixed_rows[[spec$response]] <- summary(fit_v)$tTable %>%
+                        as.data.frame() %>%
+                        tibble::rownames_to_column("term") %>%
+                        as_tibble() %>%
+                        mutate(variable = spec$response, location = location_label, .before = 1) %>%
+                        rename(
+                                estimate = Value,
+                                std_error = `Std.Error`,
+                                df = DF,
+                                t_value = `t-value`,
+                                p_value = `p-value`
+                        ) %>%
+                        select(variable, location, term, estimate, std_error, df, t_value, p_value)
+
+                dat_std <- dat_v %>%
+                        mutate(response_z = safe_scale(.data[[spec$response]]))
+
+                fit_std <- nlme::lme(
+                        fixed = as.formula(
+                                paste("response_z ~", paste(spec$rhs_terms, collapse = " + "))
+                        ),
+                        random = ~1 | time_id,
+                        data = dat_std,
+                        na.action = na.omit,
+                        control = nlme::lmeControl(returnObject = TRUE)
+                )
+
+                std_rows[[spec$response]] <- summary(fit_std)$tTable %>%
+                        as.data.frame() %>%
+                        tibble::rownames_to_column("term") %>%
+                        as_tibble() %>%
+                        filter(term %in% spec$driver_terms) %>%
+                        mutate(variable = spec$response, location = location_label, .before = 1) %>%
+                        rename(
+                                estimate = Value,
+                                std_error = `Std.Error`,
+                                df = DF,
+                                t_value = `t-value`,
+                                p_value = `p-value`
+                        ) %>%
+                        select(variable, location, term, estimate, std_error, df, t_value, p_value)
+
+                vc_v <- nlme::VarCorr(fit_v)
+                random_rows[[spec$response]] <- tibble(
+                        variable = spec$response,
+                        location = location_label,
+                        component = c("time_intercept_sd", "residual_sd"),
+                        estimate = c(
+                                as.numeric(vc_v[1, "StdDev"]),
+                                as.numeric(vc_v[nrow(vc_v), "StdDev"])
+                        ),
+                        n_obs = nrow(dat_v),
+                        n_time = n_distinct(dat_v$time_id),
+                        n_analysers = n_distinct(dat_v$analyser)
+                )
+        }
+
+        list(
+                anova = bind_rows(anova_rows),
+                fixed = bind_rows(fixed_rows),
+                standardised = bind_rows(std_rows),
+                random = bind_rows(random_rows)
+        )
+}
+
+driver_model_sw <- fit_driver_mixed_models(
+        df_wide = emission_result_single,
+        location_label = "Outdoor_SW"
+)
+
+write_excel_csv(
+        driver_model_sw$anova,
+        file.path(tables_dir, "mixed_model_driver_effects_Outdoor_SW_anova.csv")
+)
+write_excel_csv(
+        driver_model_sw$fixed,
+        file.path(tables_dir, "mixed_model_driver_effects_Outdoor_SW_fixed_effects.csv")
+)
+write_excel_csv(
+        driver_model_sw$standardised,
+        file.path(tables_dir, "mixed_model_driver_effects_Outdoor_SW_standardised.csv")
+)
+write_excel_csv(
+        driver_model_sw$random,
+        file.path(tables_dir, "mixed_model_driver_effects_Outdoor_SW_random_effects.csv")
+)
+
+driver_model_summary <- driver_model_sw$standardised %>%
+        mutate(abs_estimate = abs(estimate)) %>%
         group_by(variable) %>%
+        slice_max(abs_estimate, n = 1, with_ties = FALSE) %>%
+        ungroup() %>%
+        select(variable, strongest_driver = term, std_beta = estimate, strongest_driver_p = p_value)
+
+driver_model_report <- driver_model_sw$anova %>%
+        filter(term %in% c("analyser", "hour_factor")) %>%
+        mutate(
+                F_value = round(`F-value`, 3),
+                p_value = scales::pvalue(p_value, accuracy = 0.001),
+                variable_lab = recode(variable,
+                                      "Q_vent" = "Q",
+                                      "e_CH4_ghLU" = "eCH4",
+                                      "e_NH3_ghLU" = "eNH3"),
+                term_lab = recode(term,
+                                  "analyser" = "analyser",
+                                  "hour_factor" = "hour-of-day")
+        ) %>%
+        left_join(
+                driver_model_summary %>%
+                        mutate(
+                                strongest_driver = recode(
+                                        strongest_driver,
+                                        "delta_CO2_z" = "delta_CO2",
+                                        "delta_CH4_z" = "delta_CH4",
+                                        "delta_NH3_z" = "delta_NH3",
+                                        "Q_vent_z" = "Q",
+                                        "n_dairycows_z" = "n_dairycows",
+                                        "temp_in_z" = "temp_in",
+                                        "Y1_milk_prod_z" = "Y1_milk_prod",
+                                        "ws_mst_z" = "ws_mst"
+                                ),
+                                std_beta = round(std_beta, 3),
+                                strongest_driver_p = scales::pvalue(strongest_driver_p, accuracy = 0.001)
+                        ),
+                by = "variable"
+        ) %>%
+        group_by(variable, variable_lab, strongest_driver, std_beta, strongest_driver_p) %>%
         summarise(
-                max_abs = max(abs(c(conf_low, conf_high, estimate)), na.rm = TRUE),
+                effects = paste0(
+                        term_lab, ": F(", numDF, ", ", denDF, ") = ", F_value, ", p = ", p_value,
+                        collapse = "; "
+                ),
                 .groups = "drop"
         ) %>%
         mutate(
-                max_abs = ifelse(max_abs == 0, 1, max_abs),
-                max_abs = max_abs * 1.12,
-                analyser = factor("CRDS.1",
-                                  levels = c("CRDS.1","CRDS.2","CRDS.3",
-                                             "FTIR.1","FTIR.2","FTIR.3","FTIR.4"))
+                line = sprintf(
+                        "%s at Outdoor^SW: %s; strongest standardised numeric driver = %s (beta = %s, p = %s)",
+                        variable_lab, effects, strongest_driver, std_beta, strongest_driver_p
+                )
         ) %>%
-        select(variable, analyser, max_abs)
+        pull(line)
 
-write_excel_csv(
-        mixed_model_sw_effects,
-        file.path(tables_dir, "mixed_model_analyser_effect_Outdoor_SW_effect_plot_data.csv")
+write_lines(
+        c(
+                "Repeated-measures driver mixed models on the retained Outdoor^SW dataset",
+                "Q model: Q ~ analyser + hour + delta_CO2 + n_dairycows + temp_in + Y1_milk_prod + ws_mst + (1 | time_id)",
+                "eCH4 model: eCH4 ~ analyser + hour + Q + delta_CH4 + n_dairycows + temp_in + Y1_milk_prod + ws_mst + (1 | time_id)",
+                "eNH3 model: eNH3 ~ analyser + hour + Q + delta_NH3 + n_dairycows + temp_in + Y1_milk_prod + ws_mst + (1 | time_id)",
+                driver_model_report
+        ),
+        file.path(report_dir, "mixed_model_driver_effects_Outdoor_SW.txt")
 )
 
-mixed_model_effect_plot <- ggplot(
-        mixed_model_sw_effects,
-        aes(x = analyser, y = estimate, colour = analyser)
+driver_effect_plot_data <- driver_model_sw$standardised %>%
+        mutate(
+                driver = recode(
+                        term,
+                        "delta_CO2_z" = "delta_CO2",
+                        "delta_CH4_z" = "delta_CH4",
+                        "delta_NH3_z" = "delta_NH3",
+                        "Q_vent_z" = "Q",
+                        "n_dairycows_z" = "n_dairycows",
+                        "temp_in_z" = "temp_in",
+                        "Y1_milk_prod_z" = "Y1_milk_prod",
+                        "ws_mst_z" = "ws_mst"
+                ),
+                conf_low = estimate - 1.96 * std_error,
+                conf_high = estimate + 1.96 * std_error,
+                variable = factor(variable, levels = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU")),
+                driver = factor(driver,
+                                levels = c("delta_CO2", "delta_CH4", "delta_NH3",
+                                           "Q", "n_dairycows", "temp_in",
+                                           "Y1_milk_prod", "ws_mst"))
+        )
+
+write_excel_csv(
+        driver_effect_plot_data,
+        file.path(tables_dir, "mixed_model_driver_effects_Outdoor_SW_plot_data.csv")
+)
+
+driver_effect_plot <- ggplot(
+        driver_effect_plot_data,
+        aes(x = driver, y = estimate)
 ) +
-        geom_blank(data = mixed_model_sw_axis_guides, aes(y = max_abs), inherit.aes = FALSE) +
-        geom_blank(data = mixed_model_sw_axis_guides, aes(y = -max_abs), inherit.aes = FALSE) +
         geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.5) +
-        geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.16, linewidth = 0.8) +
-        geom_point(size = 2.6) +
+        geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.14, linewidth = 0.7, colour = "#2f6db3") +
+        geom_point(size = 2.4, colour = "#2f6db3") +
         facet_wrap(
                 ~ variable,
                 ncol = 3,
                 scales = "free_y",
                 labeller = labeller(variable = as_labeller(VAR_LABELS_UNITS, label_parsed))
         ) +
-        scale_colour_manual(values = ANALYSER_COLORS[names(ANALYSER_COLORS) != "FTIR.4_old"]) +
-        scale_y_continuous(
-                breaks = function(lims) {
-                        lim <- max(abs(lims), na.rm = TRUE)
-                        seq(-lim, lim, length.out = 9)
-                },
-                labels = function(x) {
-                        lim <- max(abs(x), na.rm = TRUE)
-                        if (lim >= 10) {
-                                format(round(x, 0), trim = TRUE, scientific = FALSE, nsmall = 0)
-                        } else if (lim >= 1) {
-                                format(round(x, 2), trim = TRUE, scientific = FALSE, nsmall = 2)
-                        } else {
-                                format(round(x, 2), trim = TRUE, scientific = FALSE, nsmall = 2)
-                        }
-                }
-        ) +
-        labs(x = NULL, y = "Estimated analyser effect relative to CRDS.1") +
-        theme_bw(base_size = 14) +
+        labs(x = NULL, y = "Standardised fixed-effect estimate") +
+        theme_bw(base_size = 13) +
         theme(
                 panel.grid = element_blank(),
                 strip.background = element_rect(fill = "grey96", colour = "black"),
-                strip.text = element_text(size = 14, face = "plain"),
-                axis.text.x = element_text(size = 12, angle = 45, hjust = 1),
-                axis.text.y = element_text(size = 12),
-                axis.title.y = element_text(size = 13),
+                strip.text = element_text(size = 13),
+                axis.text.x = element_text(angle = 45, hjust = 1),
                 legend.position = "none"
         )
 
 ggsave(
-        file.path(plots_dir, "mixed_model_analyser_effect_Outdoor_SW.png"),
-        mixed_model_effect_plot,
-        width = 13.8,
-        height = 4.9,
+        file.path(plots_dir, "mixed_model_driver_effects_Outdoor_SW.png"),
+        driver_effect_plot,
+        width = 12.5,
+        height = 4.8,
         dpi = 300,
         bg = "white"
 )
 
 #### 13. Delta / Q / e plots ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â single outdoor                                 ####
-single_for_plot <- single_long %>%
+single_for_plot <- lab_long_single %>%
         mutate(day  = factor(as.Date(DATE.TIME)),
                hour = factor(format(DATE.TIME, "%H:%M")))
 
-make_plot_frame_for_outdoor <- function(df_long, outdoor_label, suffix_tag) {
-        out <- df_long %>%
-                filter(location %in% c("Indoor", outdoor_label)) %>%
-                mutate(day  = factor(as.Date(DATE.TIME)),
-                       hour = factor(format(DATE.TIME, "%H:%M")))
-        d_trend <- emitrendplot(out,
-                                y = c("delta_CO2","delta_CH4","delta_NH3"),
-                                location_filter = outdoor_label)
-        d_box <- emiboxplot(out,
-                            y = c("delta_CO2","delta_CH4","delta_NH3"),
-                            location_filter = outdoor_label)
-        qe_trend <- emitrendplot(out,
-                                 y = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-                                 location_filter = outdoor_label)
-        qe_box <- emiboxplot(out,
-                             y = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-                             location_filter = outdoor_label)
-        ggsave(file.path(plots_dir, paste0("d_trend_plot_", suffix_tag, ".png")), d_trend,
-               width = 10.5, height = 6.2, dpi = 300)
-        ggsave(file.path(plots_dir, paste0("d_boxplot_", suffix_tag, ".png")), d_box,
-               width = 10.5, height = 6.2, dpi = 300)
-        ggsave(file.path(plots_dir, paste0("q_e_trend_plot_", suffix_tag, ".png")), qe_trend,
-               width = 10.5, height = 6.2, dpi = 300)
-        ggsave(file.path(plots_dir, paste0("q_e_boxplot_", suffix_tag, ".png")), qe_box,
-               width = 10.5, height = 6.2, dpi = 300)
-}
+outdoor_dataset_map <- LOC_DATASET_LABELS
+outdoor_long <- lab_plot_long %>%
+        filter(location %in% c("Outdoor_NE", "Outdoor_SW")) %>%
+        mutate(day  = factor(as.Date(DATE.TIME)),
+               hour = factor(format(DATE.TIME, "%H:%M")))
 
-make_plot_frame_for_outdoor(emission_reshaped_v, "Outdoor_NE", "Outdoor_NE")
-make_plot_frame_for_outdoor(single_for_plot, RETAINED_OUTDOOR, "Outdoor_SW")
+d_trend <- emitrendplot(outdoor_long,
+                        y = c("delta_CO2","delta_CH4","delta_NH3"),
+                        location_filter = c("Outdoor_NE", "Outdoor_SW"),
+                        location_label_map = outdoor_dataset_map)
+d_box <- emiboxplot(outdoor_long,
+                    y = c("delta_CO2","delta_CH4","delta_NH3"),
+                    location_filter = c("Outdoor_NE", "Outdoor_SW"),
+                    location_label_map = outdoor_dataset_map)
+d_mean_ci <- emimean_ci_plot(outdoor_long,
+                             y = c("delta_CO2","delta_CH4","delta_NH3"),
+                             location_filter = c("Outdoor_NE", "Outdoor_SW"),
+                             location_label_map = outdoor_dataset_map)
+qe_trend <- emitrendplot(outdoor_long,
+                         y = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+                         location_filter = c("Outdoor_NE", "Outdoor_SW"),
+                         location_label_map = outdoor_dataset_map)
+qe_box <- emiboxplot(outdoor_long,
+                     y = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+                     location_filter = c("Outdoor_NE", "Outdoor_SW"),
+                     location_label_map = outdoor_dataset_map)
+qe_mean_ci <- emimean_ci_plot(outdoor_long,
+                              y = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+                              location_filter = c("Outdoor_NE", "Outdoor_SW"),
+                              location_label_map = outdoor_dataset_map)
+ggsave(file.path(plots_dir, "d_trend_plot.png"), d_trend,
+       width = 14, height = 6.4, dpi = 300)
+ggsave(file.path(plots_dir, "d_boxplot.png"), d_box,
+       width = 14, height = 6.4, dpi = 300)
+ggsave(file.path(plots_dir, "d_mean_ci.png"), d_mean_ci,
+       width = 14, height = 6.4, dpi = 300)
+ggsave(file.path(plots_dir, "q_e_trend_plot.png"), qe_trend,
+       width = 14, height = 6.4, dpi = 300)
+ggsave(file.path(plots_dir, "q_e_boxplot.png"), qe_box,
+       width = 14, height = 6.4, dpi = 300)
+ggsave(file.path(plots_dir, "q_e_mean_ci.png"), qe_mean_ci,
+       width = 14, height = 6.4, dpi = 300)
 
 hourly_dataset_summary_plot(
-        emission_csv = file.path(tables_dir, "20250408-15_emission_result.csv"),
+        emission_csv = file.path(tables_dir, "emission_result_lab_level.csv"),
         output_file  = file.path(plots_dir, "hourly_dataset_summary_delta.png"),
         var_order    = c("delta_CO2", "delta_CH4", "delta_NH3"),
         include_ftir4_old = FALSE
 )
 
 hourly_dataset_summary_plot(
-        emission_csv = file.path(tables_dir, "20250408-15_emission_result.csv"),
+        emission_csv = file.path(tables_dir, "emission_result_lab_level.csv"),
         output_file  = file.path(plots_dir, "hourly_dataset_summary_q_e.png"),
         var_order    = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"),
         include_ftir4_old = FALSE
 )
 
 hourly_concentration_summary_plot(
-        emission_csv = file.path(tables_dir, "20250408-15_emission_result.csv"),
-        output_file  = file.path(plots_dir, "hourly_concentration_summary_indoor.png"),
-        location_keep = "Indoor",
-        include_ftir4_old = TRUE
+        emission_csv = file.path(tables_dir, "emission_result_lab_level.csv"),
+        output_file  = file.path(plots_dir, "hourly_concentration_summary_all.png"),
+        location_keep = c("Indoor", "Outdoor_NE", "Outdoor_SW"),
+        include_ftir4_old = FALSE
 )
 
 hourly_concentration_summary_plot(
-        emission_csv = file.path(tables_dir, "20250408-15_emission_result.csv"),
-        output_file  = file.path(plots_dir, "hourly_concentration_summary_outdoors.png"),
-        location_keep = c("Outdoor_NE", "Outdoor_SW"),
-        include_ftir4_old = TRUE
+        emission_csv = file.path(tables_dir, "emission_result_lab_level.csv"),
+        output_file  = file.path(plots_dir, "hourly_concentration_summary_all_no_old.png"),
+        location_keep = c("Indoor", "Outdoor_NE", "Outdoor_SW"),
+        include_ftir4_old = FALSE
 )
 
 hourly_weather_input_plot(
@@ -1954,66 +2317,56 @@ save_ba_family <- function(data, vars, locations, analyser_pair, tag, file, ncol
                width = width, height = height, units = "in", dpi = 300)
 }
 
-save_ba_by_location <- function(data, vars, locations, analyser_pair, tag, prefix,
-                                width = 12, height = 7) {
-        walk(locations, function(loc) {
-                file <- paste0(prefix, "_", loc, "_", tag, ".png")
-                save_ba_family(data,
-                               vars = vars,
-                               locations = loc,
-                               analyser_pair = analyser_pair,
-                               tag = tag,
-                               file = file,
-                               ncol = length(vars),
-                               width = width,
-                               height = height)
-        })
-}
+save_ba_family(emission_reshaped_v,
+               vars = conc_vars,
+               locations = c("Indoor", "Outdoor_NE", "Outdoor_SW"),
+               analyser_pair = ba_pairs$AnalyserA,
+               tag = "AnalyserA",
+               file = "c_BlandAltman_AnalyserA.png",
+               ncol = 3,
+               width = 12, height = 10)
+save_ba_family(emission_reshaped_v,
+               vars = conc_vars,
+               locations = c("Indoor", "Outdoor_NE", "Outdoor_SW"),
+               analyser_pair = ba_pairs$AnalyserB,
+               tag = "AnalyserB",
+               file = "c_BlandAltman_AnalyserB.png",
+               ncol = 3,
+               width = 12, height = 10)
 
-save_ba_by_location(emission_reshaped_v,
-                    vars = conc_vars,
-                    locations = c("Indoor", "Outdoor_NE", "Outdoor_SW"),
-                    analyser_pair = ba_pairs$AnalyserA,
-                    tag = "AnalyserA",
-                    prefix = "c_BlandAltman",
-                    width = 12, height = 4.5)
-save_ba_by_location(emission_reshaped_v,
-                    vars = conc_vars,
-                    locations = c("Indoor", "Outdoor_NE", "Outdoor_SW"),
-                    analyser_pair = ba_pairs$AnalyserB,
-                    tag = "AnalyserB",
-                    prefix = "c_BlandAltman",
-                    width = 12, height = 4.5)
+save_ba_family(emission_reshaped_v,
+               vars = delta_vars,
+               locations = c("Outdoor_NE", "Outdoor_SW"),
+               analyser_pair = ba_pairs$AnalyserA,
+               tag = "AnalyserA",
+               file = "d_BlandAltman.png",
+               ncol = 3,
+               width = 12, height = 7.2)
+save_ba_family(emission_reshaped_v,
+               vars = delta_vars,
+               locations = c("Outdoor_NE", "Outdoor_SW"),
+               analyser_pair = ba_pairs$AnalyserB,
+               tag = "AnalyserB",
+               file = "d_BlandAltman_AnalyserB.png",
+               ncol = 3,
+               width = 12, height = 7.2)
 
-save_ba_by_location(emission_reshaped_v,
-                    vars = delta_vars,
-                    locations = c("Outdoor_NE", "Outdoor_SW"),
-                    analyser_pair = ba_pairs$AnalyserA,
-                    tag = "AnalyserA",
-                    prefix = "d_BlandAltman",
-                    width = 12, height = 4.5)
-save_ba_by_location(emission_reshaped_v,
-                    vars = delta_vars,
-                    locations = c("Outdoor_NE", "Outdoor_SW"),
-                    analyser_pair = ba_pairs$AnalyserB,
-                    tag = "AnalyserB",
-                    prefix = "d_BlandAltman",
-                    width = 12, height = 4.5)
-
-save_ba_by_location(emission_reshaped_v,
-                    vars = qe_vars,
-                    locations = c("Outdoor_NE", "Outdoor_SW"),
-                    analyser_pair = ba_pairs$AnalyserA,
-                    tag = "AnalyserA",
-                    prefix = "qe_BlandAltman",
-                    width = 12, height = 4.5)
-save_ba_by_location(emission_reshaped_v,
-                    vars = qe_vars,
-                    locations = c("Outdoor_NE", "Outdoor_SW"),
-                    analyser_pair = ba_pairs$AnalyserB,
-                    tag = "AnalyserB",
-                    prefix = "qe_BlandAltman",
-                    width = 12, height = 4.5)
+save_ba_family(emission_reshaped_v,
+               vars = qe_vars,
+               locations = c("Outdoor_NE", "Outdoor_SW"),
+               analyser_pair = ba_pairs$AnalyserA,
+               tag = "AnalyserA",
+               file = "qe_BlandAltman.png",
+               ncol = 3,
+               width = 12, height = 7.2)
+save_ba_family(emission_reshaped_v,
+               vars = qe_vars,
+               locations = c("Outdoor_NE", "Outdoor_SW"),
+               analyser_pair = ba_pairs$AnalyserB,
+               tag = "AnalyserB",
+               file = "qe_BlandAltman_AnalyserB.png",
+               ncol = 3,
+               width = 12, height = 7.2)
 
 ba_specs <- tribble(
         ~group_name,      ~data_name,            ~vars,        ~locations,
@@ -2086,9 +2439,7 @@ qe_vars       <- c("Q_vent","e_CH4_ghLU","e_NH3_ghLU")
 locs_abs      <- c("Indoor","Outdoor_NE","Outdoor_SW")
 locs_delta_qe <- c("Outdoor_NE","Outdoor_SW")
 
-pairwise_abs_source <- emission_reshaped %>%
-        filter(analyser != "FTIR.4") %>%
-        mutate(analyser = ifelse(analyser == "FTIR.4_old", "FTIR.4_old", as.character(analyser)))
+pairwise_abs_source <- emission_reshaped_v
 
 pairwise_abs <- map_dfr(conc_vars, function(v)
         map_dfr(locs_abs, function(l) pairwise_compare(pairwise_abs_source, v, l)))
@@ -2097,11 +2448,10 @@ pairwise_delta <- map_dfr(delta_vars, function(v)
 pairwise_qe <- map_dfr(qe_vars, function(v)
         map_dfr(locs_delta_qe, function(l) pairwise_compare(emission_reshaped_v, v, l)))
 pairwise_tbl <- bind_rows(pairwise_abs, pairwise_delta, pairwise_qe)
-write_excel_csv(pairwise_tbl, file.path(tables_dir, "pairwise_regression_ccc.csv"))
 
 # CCC heatmaps for each variable group
 heatmap_ccc_conc_tri <- function(tbl, var_set, plain_labels, title, file) {
-        analyser_order <- c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4_old")
+        analyser_order <- c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
         d <- tbl %>%
                 filter(var %in% var_set,
                        analyser_x %in% analyser_order,
@@ -2132,7 +2482,8 @@ heatmap_ccc_conc_tri <- function(tbl, var_set, plain_labels, title, file) {
         ggsave(file.path(plots_dir, file), p, width = 12, height = 9, dpi = 300, bg = "white")
 }
 
-heatmap_ccc <- function(tbl, var_set, plain_labels, title, file, location_filter = NULL) {
+heatmap_ccc <- function(tbl, var_set, plain_labels, title, file, location_filter = NULL,
+                        location_label_map = LOC_LABELS) {
         analyser_order <- c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
         d <- tbl %>%
                 filter(var %in% var_set) %>%
@@ -2151,7 +2502,7 @@ heatmap_ccc <- function(tbl, var_set, plain_labels, title, file, location_filter
                 facet_grid(location ~ facet_label,
                            switch = "y",
                            labeller = labeller(facet_label = label_parsed,
-                                               location    = as_labeller(LOC_LABELS, label_parsed))) +
+                                               location    = as_labeller(location_label_map, label_parsed))) +
                 labs(x = NULL, y = NULL) +
                 theme_bw(base_size = 11) +
                 theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -2165,7 +2516,7 @@ heatmap_ccc <- function(tbl, var_set, plain_labels, title, file, location_filter
         ggsave(file.path(plots_dir, file), p, width = out_width, height = out_height, dpi = 300, bg = "white")
 }
 heatmap_ccc_conc_tri(pairwise_abs, conc_vars, VAR_LABELS_PLAIN,
-                     "Pairwise agreement, concentrations (includes FTIR.4_old; Lin's CCC)",
+                     "Pairwise agreement, concentrations (Lin's CCC)",
                      "pairwise_ccc_concentration_c.png")
 heatmap_ccc(pairwise_delta, delta_vars, VAR_LABELS_PLAIN,
             "Pairwise agreement, ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â concentrations - Outdoor^NE (Lin's CCC)",
@@ -2183,6 +2534,54 @@ heatmap_ccc(pairwise_qe, qe_vars, VAR_LABELS_PLAIN,
             "Pairwise agreement, ventilation + emissions - Outdoor^SW (Lin's CCC)",
             "pairwise_ccc_q_e_Outdoor_SW.png",
             location_filter = "Outdoor_SW")
+
+# Merged Outdoor^NE and Outdoor^SW CCC panels for the streamlined manuscript workflow
+heatmap_ccc(pairwise_delta, delta_vars, VAR_LABELS_PLAIN,
+            "Pairwise agreement, delta concentrations (Lin's CCC)",
+            "pairwise_ccc_delta_c.png",
+            location_filter = c("Outdoor_NE", "Outdoor_SW"),
+            location_label_map = LOC_DATASET_LABELS)
+heatmap_ccc(pairwise_qe, qe_vars, VAR_LABELS_PLAIN,
+            "Pairwise agreement, ventilation and emissions (Lin's CCC)",
+            "pairwise_ccc_q_e.png",
+            location_filter = c("Outdoor_NE", "Outdoor_SW"),
+            location_label_map = LOC_DATASET_LABELS)
+
+heatmap_ccc_labs <- function(tbl, var_set, plain_labels, file, location_filter = NULL,
+                             location_label_map = LOC_LABELS) {
+        d <- tbl %>%
+                filter(var %in% var_set) %>%
+                { if (!is.null(location_filter)) filter(., location %in% location_filter) else . } %>%
+                filter(lab_x %in% LAB_ORDER,
+                       lab_y %in% LAB_ORDER) %>%
+                mutate(
+                        facet_label = factor(plain_labels[var], levels = plain_labels[var_set]),
+                        lab_x = factor(lab_x, levels = LAB_ORDER),
+                        lab_y = factor(lab_y, levels = rev(LAB_ORDER))
+                )
+        p <- ggplot(d, aes(x = lab_x, y = lab_y, fill = ccc)) +
+                geom_tile(color = "white") +
+                geom_text(aes(label = sprintf("%.2f", ccc)), size = 3.0) +
+                scale_fill_gradient2(low = "#b2182b", mid = "#f6d8b8", high = "#1a9850",
+                                     midpoint = 0.5, limits = c(0, 1), name = "Lin's CCC") +
+                scale_y_discrete(position = "right") +
+                facet_grid(location ~ facet_label,
+                           switch = "y",
+                           labeller = labeller(facet_label = label_parsed,
+                                               location = as_labeller(location_label_map, label_parsed))) +
+                labs(x = NULL, y = NULL) +
+                theme_bw(base_size = 11) +
+                theme(axis.text.x = element_text(angle = 45, hjust = 1),
+                      axis.text.y.right = element_text(angle = 45, hjust = 0.5),
+                      axis.text.y.left = element_blank(),
+                      axis.ticks.y.left = element_blank(),
+                      strip.placement = "outside",
+                      legend.position = "bottom",
+                      panel.grid = element_blank())
+        out_width  <- if (!is.null(location_filter) && length(location_filter) == 1) 8.4 else 9.4
+        out_height <- if (!is.null(location_filter) && length(location_filter) == 1) 4.2 else 6.4
+        ggsave(file.path(plots_dir, file), p, width = out_width, height = out_height, dpi = 300, bg = "white")
+}
 
 regression_scatter_panels <- function(df_long, pair_tbl, vars, location_filter,
                                       file, width = 10, height = 8, ncol = 6) {
@@ -2242,42 +2641,8 @@ regression_scatter_panels <- function(df_long, pair_tbl, vars, location_filter,
                            labeller = label_parsed)
         ggsave(file.path(plots_dir, file), p, width = width, height = height, dpi = 300, bg = "white")
 }
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("delta_CO2"), "Outdoor_NE",
-                          "pairwise_regression_delta_CO2_Outdoor_NE.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("delta_CO2"), "Outdoor_SW",
-                          "pairwise_regression_delta_CO2_Outdoor_SW.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("delta_CH4"), "Outdoor_NE",
-                          "pairwise_regression_delta_CH4_Outdoor_NE.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("delta_CH4"), "Outdoor_SW",
-                          "pairwise_regression_delta_CH4_Outdoor_SW.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("delta_NH3"), "Outdoor_NE",
-                          "pairwise_regression_delta_NH3_Outdoor_NE.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("delta_NH3"), "Outdoor_SW",
-                          "pairwise_regression_delta_NH3_Outdoor_SW.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("Q_vent"), "Outdoor_NE",
-                          "pairwise_regression_Q_vent_Outdoor_NE.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("Q_vent"), "Outdoor_SW",
-                          "pairwise_regression_Q_vent_Outdoor_SW.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("e_CH4_ghLU"), "Outdoor_NE",
-                          "pairwise_regression_e_CH4_Outdoor_NE.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("e_CH4_ghLU"), "Outdoor_SW",
-                          "pairwise_regression_e_CH4_Outdoor_SW.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("e_NH3_ghLU"), "Outdoor_NE",
-                          "pairwise_regression_e_NH3_Outdoor_NE.png",
-                          width = 18, height = 6, ncol = 7)
-regression_scatter_panels(emission_reshaped_v, pairwise_tbl, c("e_NH3_ghLU"), "Outdoor_SW",
-                          "pairwise_regression_e_NH3_Outdoor_SW.png",
-                          width = 18, height = 6, ncol = 7)
+# Pairwise regression scatter-panels and their CSV export were retired from the
+# Version 13 manuscript workflow to reduce plot clutter.
 
 #### 16. Tukey HSD pairwise tables  (Tables 3, 4, 6 of the manuscript)        ####
 # One-way ANOVA per (variable, location) on the analyser factor, followed by
@@ -2411,6 +2776,7 @@ plot_pairwise_matrix <- function(plot_df, vars, locs, analyser_order, file_name,
         rd_df <- plot_df %>% filter(cell_type == "lower", !is.na(RD_pct))
         diag_df <- plot_df %>% filter(cell_type == "diag")
 
+        loc_labels <- if (all(locs %in% c("Outdoor_NE", "Outdoor_SW"))) LOC_DATASET_LABELS[locs] else LOC_LABELS[locs]
         p <- ggplot(full_grid, aes(x = col_analyser, y = row_analyser)) +
                 geom_tile(fill = "white", color = "white", linewidth = 0.45) +
                 geom_tile(data = annot_df, fill = "white", color = "white", linewidth = 0.45) +
@@ -2420,7 +2786,7 @@ plot_pairwise_matrix <- function(plot_df, vars, locs, analyser_order, file_name,
                 geom_text(data = rd_df, aes(label = label), size = 4.5, family = "", color = "black") +
                 geom_text(data = diag_df, aes(label = label), size = 4.9, family = "", color = "black") +
                 facet_grid(
-                        rows = vars(factor(location, levels = locs, labels = LOC_LABELS[locs])),
+                        rows = vars(factor(location, levels = locs, labels = loc_labels)),
                         cols = vars(factor(variable, levels = vars, labels = VAR_LABELS_PLAIN[vars])),
                         switch = "y",
                         labeller = labeller(.rows = label_parsed, .cols = label_parsed)
@@ -2501,35 +2867,19 @@ conc_plot_df <- build_pairwise_plot_data(
         analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
 )
 
-delta_ne_plot_df <- build_pairwise_plot_data(
+delta_plot_df <- build_pairwise_plot_data(
         tukey_tbl = tukey_delta,
         df_long = emission_reshaped_v,
         vars = c("delta_CO2","delta_CH4","delta_NH3"),
-        locs = c("Outdoor_NE"),
+        locs = c("Outdoor_NE","Outdoor_SW"),
         analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
 )
 
-delta_sw_plot_df <- build_pairwise_plot_data(
-        tukey_tbl = tukey_delta,
-        df_long = emission_reshaped_v,
-        vars = c("delta_CO2","delta_CH4","delta_NH3"),
-        locs = c("Outdoor_SW"),
-        analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
-)
-
-qe_ne_plot_df <- build_pairwise_plot_data(
+qe_plot_df <- build_pairwise_plot_data(
         tukey_tbl = tukey_qe,
         df_long = emission_reshaped_v,
         vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-        locs = c("Outdoor_NE"),
-        analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
-)
-
-qe_sw_plot_df <- build_pairwise_plot_data(
-        tukey_tbl = tukey_qe,
-        df_long = emission_reshaped_v,
-        vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-        locs = c("Outdoor_SW"),
+        locs = c("Outdoor_NE","Outdoor_SW"),
         analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4")
 )
 
@@ -2542,33 +2892,19 @@ plot_pairwise_matrix(
         width = 22, height = 12,
         fixed_aspect = FALSE
 )
-plot_pairwise_matrix(delta_ne_plot_df %>% filter(location == "Outdoor_NE"),
+plot_pairwise_matrix(delta_plot_df,
                      vars = c("delta_CO2","delta_CH4","delta_NH3"),
-                     locs = c("Outdoor_NE"),
+                     locs = c("Outdoor_NE","Outdoor_SW"),
                      analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4"),
-                     file_name = "pairwise_tukey_rd_delta_Outdoor_NE.png",
-                     width = 22, height = 6.2,
+                     file_name = "pairwise_tukey_rd_delta.png",
+                     width = 22, height = 12,
                      fixed_aspect = FALSE)
-plot_pairwise_matrix(delta_sw_plot_df %>% filter(location == "Outdoor_SW"),
-                     vars = c("delta_CO2","delta_CH4","delta_NH3"),
-                     locs = c("Outdoor_SW"),
-                     analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4"),
-                     file_name = "pairwise_tukey_rd_delta_Outdoor_SW.png",
-                     width = 22, height = 6.2,
-                     fixed_aspect = FALSE)
-plot_pairwise_matrix(qe_ne_plot_df %>% filter(location == "Outdoor_NE"),
+plot_pairwise_matrix(qe_plot_df,
                      vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-                     locs = c("Outdoor_NE"),
+                     locs = c("Outdoor_NE","Outdoor_SW"),
                      analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4"),
-                     file_name = "pairwise_tukey_rd_qe_Outdoor_NE.png",
-                     width = 22, height = 6.2,
-                     fixed_aspect = FALSE)
-plot_pairwise_matrix(qe_sw_plot_df %>% filter(location == "Outdoor_SW"),
-                     vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
-                     locs = c("Outdoor_SW"),
-                     analyser_order = c("CRDS.1","CRDS.2","CRDS.3","FTIR.1","FTIR.2","FTIR.3","FTIR.4"),
-                     file_name = "pairwise_tukey_rd_qe_Outdoor_SW.png",
-                     width = 22, height = 6.2,
+                     file_name = "pairwise_tukey_rd_qe.png",
+                     width = 22, height = 12,
                      fixed_aspect = FALSE)
 # Long-form CSV layout (one row per analyser pair) is still kept for reporting:
 #   variable, location, analyser_1, analyser_2, n_1, n_2, mean_1, mean_2,
@@ -2576,6 +2912,519 @@ plot_pairwise_matrix(qe_sw_plot_df %>% filter(location == "Outdoor_SW"),
 #   RD_pct = 100 * (mean_1 - mean_2) / mean_2,
 #   p_tukey (Tukey-adjusted within the (variable, location) panel),
 #   sig (ns / * / ** / ***).
+
+#### 16B. Lab-level summaries and comparisons                                ####
+# Lab-level outputs use one representative analyser per lab so the x-axis
+# compares like-with-like. Labs A and B are restricted to CRDS.1 and CRDS.2
+# respectively; Labs C, D and E already map to a single analyser.
+
+lab_panel_summary <- function(df_long, var_sel, loc_sel, baseline_lab = LAB_BASELINE) {
+        x <- df_long %>%
+                filter(var == var_sel, location == loc_sel,
+                       !is.na(value), is.finite(value),
+                       !is.na(group_id)) %>%
+                mutate(group_id = factor(as.character(group_id), levels = LAB_ORDER)) %>%
+                filter(!is.na(group_id))
+        if (nrow(x) < 10 || dplyr::n_distinct(x$group_id) < 2) {
+                        return(list(summary = NULL, anova = NULL))
+        }
+
+        fit <- aov(value ~ group_id, data = x)
+        tk <- TukeyHSD(fit, conf.level = 0.95)$group_id
+        tk_tbl <- as_tibble(tk, rownames = "contrast") %>%
+                rename(diff = diff, lwr = lwr, upr = upr, p_tukey = `p adj`)
+
+        means <- x %>%
+                group_by(group_id) %>%
+                summarise(
+                        n = sum(is.finite(value)),
+                        mean = mean(value, na.rm = TRUE),
+                        sd = sd(value, na.rm = TRUE),
+                        min = min(value, na.rm = TRUE),
+                        max = max(value, na.rm = TRUE),
+                        se = sd / sqrt(pmax(n, 1)),
+                        ci95_low = mean - 1.96 * se,
+                        ci95_high = mean + 1.96 * se,
+                        .groups = "drop"
+                )
+
+        baseline_mean <- means$mean[means$group_id == baseline_lab]
+        if (length(baseline_mean) == 0) baseline_mean <- NA_real_
+
+        extract_tukey_vs_baseline <- function(lab_code) {
+                if (lab_code == baseline_lab) {
+                        return(tibble(
+                                tukey_p_vs_labC = NA_real_,
+                                tukey_sig_vs_labC = "ref",
+                                tukey_diff_vs_labC = 0,
+                                tukey_lwr_vs_labC = NA_real_,
+                                tukey_upr_vs_labC = NA_real_
+                        ))
+                }
+
+                pair1 <- paste0(lab_code, "-", baseline_lab)
+                pair2 <- paste0(baseline_lab, "-", lab_code)
+
+                if (pair1 %in% tk_tbl$contrast) {
+                        row <- tk_tbl %>% filter(contrast == pair1)
+                        return(tibble(
+                                tukey_p_vs_labC = row$p_tukey[[1]],
+                                tukey_sig_vs_labC = sig_code(row$p_tukey[[1]]),
+                                tukey_diff_vs_labC = row$diff[[1]],
+                                tukey_lwr_vs_labC = row$lwr[[1]],
+                                tukey_upr_vs_labC = row$upr[[1]]
+                        ))
+                }
+                if (pair2 %in% tk_tbl$contrast) {
+                        row <- tk_tbl %>% filter(contrast == pair2)
+                        return(tibble(
+                                tukey_p_vs_labC = row$p_tukey[[1]],
+                                tukey_sig_vs_labC = sig_code(row$p_tukey[[1]]),
+                                tukey_diff_vs_labC = -row$diff[[1]],
+                                tukey_lwr_vs_labC = -row$upr[[1]],
+                                tukey_upr_vs_labC = -row$lwr[[1]]
+                        ))
+                }
+
+                tibble(
+                        tukey_p_vs_labC = NA_real_,
+                        tukey_sig_vs_labC = NA_character_,
+                        tukey_diff_vs_labC = NA_real_,
+                        tukey_lwr_vs_labC = NA_real_,
+                        tukey_upr_vs_labC = NA_real_
+                )
+        }
+
+        summary_tbl <- means %>%
+                mutate(tukey_vs_labC = purrr::map(as.character(group_id), extract_tukey_vs_baseline)) %>%
+                tidyr::unnest_wider(tukey_vs_labC) %>%
+                mutate(
+                        variable = var_sel,
+                        location = loc_sel,
+                        rd_vs_labC_pct = if (is.finite(baseline_mean) && baseline_mean != 0) {
+                                100 * (mean - baseline_mean) / baseline_mean
+                        } else {
+                                NA_real_
+                        }
+                ) %>%
+                select(variable, location, lab = group_id, n, mean, sd, min, max,
+                       ci95_low, ci95_high, rd_vs_labC_pct,
+                       tukey_p_vs_labC, tukey_sig_vs_labC,
+                       tukey_diff_vs_labC, tukey_lwr_vs_labC, tukey_upr_vs_labC)
+
+        fit_sum <- summary(fit)[[1]]
+        anova_tbl <- tibble(
+                variable = var_sel,
+                location = loc_sel,
+                df_1 = fit_sum[1, "Df"],
+                df_2 = fit_sum[2, "Df"],
+                F_value = fit_sum[1, "F value"],
+                p_value = fit_sum[1, "Pr(>F)"]
+        )
+
+        list(summary = summary_tbl, anova = anova_tbl)
+}
+
+lab_summary_table <- function(df_long, vars, locs) {
+        panels <- expand_grid(variable = vars, location = locs)
+        out <- map2(
+                panels$variable, panels$location,
+                ~ lab_panel_summary(df_long, .x, .y, baseline_lab = LAB_BASELINE)
+        )
+        list(
+                summary = bind_rows(map(out, "summary")),
+                anova = bind_rows(map(out, "anova"))
+        )
+}
+
+pairwise_compare_group <- function(df_long, var_sel, loc_sel) {
+        w <- df_long %>%
+                filter(var == var_sel, location == loc_sel, !is.na(group_id)) %>%
+                select(DATE.TIME, group_id, value) %>%
+                mutate(group_id = as.character(group_id)) %>%
+                pivot_wider(names_from = group_id, values_from = value,
+                            values_fn = ~ mean(.x, na.rm = TRUE))
+        groups <- intersect(LAB_ORDER, setdiff(names(w), "DATE.TIME"))
+        if (length(groups) < 2) return(NULL)
+        map_dfr(combn(groups, 2, simplify = FALSE), function(pr) {
+                x <- w[[pr[1]]]
+                y <- w[[pr[2]]]
+                ok <- complete.cases(x, y)
+                x <- x[ok]; y <- y[ok]
+                if (length(x) < 5) return(NULL)
+                dem <- deming_fit(x, y)
+                lm_fit <- lm(y ~ x)
+                tibble(
+                        var = var_sel, location = loc_sel,
+                        lab_x = pr[1], lab_y = pr[2], n = length(x),
+                        pearson_r = cor(x, y),
+                        ccc = DescTools::CCC(x, y)$rho.c[, "est"],
+                        deming_slope = unname(dem["slope"]),
+                        deming_intercept = unname(dem["intercept"]),
+                        ols_slope = unname(coef(lm_fit)[2]),
+                        ols_intercept = unname(coef(lm_fit)[1]),
+                        r_squared = summary(lm_fit)$r.squared
+                )
+        })
+}
+
+bootstrap_reference_agreement <- function(x, y, n_boot = 400, seed = 42) {
+        ok <- complete.cases(x, y)
+        x <- x[ok]; y <- y[ok]
+        n <- length(x)
+        if (n < 5) {
+                return(tibble(
+                        slope_ci_low = NA_real_, slope_ci_high = NA_real_,
+                        intercept_ci_low = NA_real_, intercept_ci_high = NA_real_,
+                        rd_ci_low = NA_real_, rd_ci_high = NA_real_
+                ))
+        }
+        set.seed(seed)
+        boot_idx <- replicate(n_boot, sample.int(n, size = n, replace = TRUE), simplify = FALSE)
+        boot_tbl <- purrr::map_dfr(boot_idx, function(idx) {
+                xb <- x[idx]; yb <- y[idx]
+                dem <- deming_fit(xb, yb)
+                ref_mean <- mean(xb, na.rm = TRUE)
+                rd <- if (is.finite(ref_mean) && ref_mean != 0) {
+                        100 * (mean(yb, na.rm = TRUE) - ref_mean) / ref_mean
+                } else {
+                        NA_real_
+                }
+                tibble(
+                        slope = unname(dem["slope"]),
+                        intercept = unname(dem["intercept"]),
+                        rd_pct = rd
+                )
+        })
+        tibble(
+                        slope_ci_low = quantile(boot_tbl$slope, 0.025, na.rm = TRUE),
+                        slope_ci_high = quantile(boot_tbl$slope, 0.975, na.rm = TRUE),
+                        intercept_ci_low = quantile(boot_tbl$intercept, 0.025, na.rm = TRUE),
+                        intercept_ci_high = quantile(boot_tbl$intercept, 0.975, na.rm = TRUE),
+                        rd_ci_low = quantile(boot_tbl$rd_pct, 0.025, na.rm = TRUE),
+                        rd_ci_high = quantile(boot_tbl$rd_pct, 0.975, na.rm = TRUE)
+        )
+}
+
+reference_lab_compare <- function(df_long, vars, locs, reference_lab = LAB_BASELINE) {
+        target_labs <- setdiff(LAB_ORDER, reference_lab)
+        purrr::map_dfr(vars, function(var_sel) {
+                purrr::map_dfr(locs, function(loc_sel) {
+                        w <- df_long %>%
+                                filter(var == var_sel, location == loc_sel, !is.na(group_id)) %>%
+                                select(DATE.TIME, group_id, value) %>%
+                                mutate(group_id = as.character(group_id)) %>%
+                                pivot_wider(names_from = group_id, values_from = value,
+                                            values_fn = ~ mean(.x, na.rm = TRUE))
+                        if (!reference_lab %in% names(w)) return(NULL)
+                        purrr::map_dfr(target_labs, function(lab_cmp) {
+                                if (!lab_cmp %in% names(w)) return(NULL)
+                                x <- w[[reference_lab]]
+                                y <- w[[lab_cmp]]
+                                ok <- complete.cases(x, y)
+                                x <- x[ok]; y <- y[ok]
+                                if (length(x) < 5) return(NULL)
+                                dem <- deming_fit(x, y)
+                                lm_fit <- lm(y ~ x)
+                                ref_mean <- mean(x, na.rm = TRUE)
+                                cmp_mean <- mean(y, na.rm = TRUE)
+                                rd_pct <- if (is.finite(ref_mean) && ref_mean != 0) {
+                                        100 * (cmp_mean - ref_mean) / ref_mean
+                                } else {
+                                        NA_real_
+                                }
+                                ci_tbl <- bootstrap_reference_agreement(x, y)
+                                bind_cols(
+                                        tibble(
+                                                var = var_sel,
+                                                location = loc_sel,
+                                                reference_lab = reference_lab,
+                                                comparison_lab = lab_cmp,
+                                                n = length(x),
+                                                reference_mean = ref_mean,
+                                                comparison_mean = cmp_mean,
+                                                rd_pct = rd_pct,
+                                                pearson_r = cor(x, y),
+                                                ccc = DescTools::CCC(x, y)$rho.c[, "est"],
+                                                deming_slope = unname(dem["slope"]),
+                                                deming_intercept = unname(dem["intercept"]),
+                                                ols_slope = unname(coef(lm_fit)[2]),
+                                                ols_intercept = unname(coef(lm_fit)[1]),
+                                                r_squared = summary(lm_fit)$r.squared
+                                        ),
+                                        ci_tbl
+                                )
+                        })
+                })
+        })
+}
+
+reference_lab_scatter_panels <- function(df_long, summary_tbl, var_sel, locs,
+                                         reference_lab = LAB_BASELINE,
+                                         file, width = 11, height = 6.8) {
+        spec_tbl <- summary_tbl %>%
+                filter(var == var_sel, location %in% locs) %>%
+                mutate(
+                        comparison_lab = factor(comparison_lab,
+                                                levels = setdiff(LAB_ORDER, reference_lab)),
+                        location = factor(location, levels = locs,
+                                          labels = LOC_DATASET_LABELS[locs]),
+                        panel_label = factor(comparison_lab,
+                                             levels = setdiff(LAB_ORDER, reference_lab))
+                )
+        if (!nrow(spec_tbl)) return(invisible(NULL))
+
+        plot_df <- purrr::pmap_dfr(spec_tbl[, c("location", "comparison_lab")], function(location, comparison_lab) {
+                loc_key <- names(LOC_DATASET_LABELS)[match(as.character(location), LOC_DATASET_LABELS)]
+                w <- df_long %>%
+                        filter(var == var_sel, location == loc_key, !is.na(group_id),
+                               as.character(group_id) %in% c(reference_lab, as.character(comparison_lab))) %>%
+                        select(DATE.TIME, group_id, value) %>%
+                        mutate(group_id = as.character(group_id)) %>%
+                        pivot_wider(names_from = group_id, values_from = value,
+                                    values_fn = ~ mean(.x, na.rm = TRUE))
+                if (!all(c(reference_lab, as.character(comparison_lab)) %in% names(w))) return(NULL)
+                w %>%
+                        transmute(x = .data[[reference_lab]],
+                                  y = .data[[as.character(comparison_lab)]]) %>%
+                        filter(complete.cases(x, y)) %>%
+                        mutate(location = location, comparison_lab = comparison_lab)
+        })
+
+        ann <- spec_tbl %>%
+                mutate(
+                        label = sprintf("n = %d\nSlope = %.2f [%.2f, %.2f]\nIntercept = %.2f [%.2f, %.2f]\nCCC = %.2f\nRD = %+.1f%%",
+                                        n, deming_slope, slope_ci_low, slope_ci_high,
+                                        deming_intercept, intercept_ci_low, intercept_ci_high,
+                                        ccc, rd_pct)
+                )
+        if (!nrow(plot_df)) return(invisible(NULL))
+
+        p <- ggplot(plot_df, aes(x = x, y = y)) +
+                geom_point(shape = 16, size = 0.95, alpha = 0.45, color = "#4d4d4d") +
+                geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+                            linewidth = 0.45, color = "grey55") +
+                geom_abline(data = ann,
+                            aes(slope = deming_slope, intercept = deming_intercept),
+                            color = "#1a9850", linewidth = 0.7, inherit.aes = FALSE) +
+                geom_text(data = ann, aes(x = -Inf, y = Inf, label = label),
+                          hjust = -0.04, vjust = 1.08, size = 2.8, inherit.aes = FALSE) +
+                facet_grid(location ~ comparison_lab, scales = "free",
+                           labeller = labeller(location = label_parsed)) +
+                labs(x = paste(reference_lab, "(reference)"), y = NULL) +
+                theme_classic() +
+                theme(
+                        text = element_text(size = 14),
+                        panel.border = element_rect(color = "black", fill = NA),
+                        panel.grid = element_blank(),
+                        strip.text = element_text(face = "bold", size = 11),
+                        axis.title.x = element_text(size = 12)
+                )
+        ggsave(file.path(plots_dir, file), p, width = width, height = height, dpi = 300, bg = "white")
+}
+
+lab_concentration_stats <- lab_summary_table(
+        lab_long_v,
+        vars = c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3"),
+        locs = c("Indoor", "Outdoor_NE", "Outdoor_SW")
+)
+lab_delta_stats <- lab_summary_table(
+        lab_long_v,
+        vars = c("delta_CO2", "delta_CH4", "delta_NH3"),
+        locs = c("Outdoor_NE", "Outdoor_SW")
+)
+lab_qe_stats <- lab_summary_table(
+        lab_long_v,
+        vars = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"),
+        locs = c("Outdoor_SW")
+)
+
+write_excel_csv(lab_concentration_stats$summary,
+                file.path(tables_dir, "lab_concentration_summary_vs_labC.csv"))
+write_excel_csv(lab_delta_stats$summary,
+                file.path(tables_dir, "lab_delta_summary_vs_labC.csv"))
+write_excel_csv(lab_qe_stats$summary,
+                file.path(tables_dir, "lab_qe_summary_vs_labC.csv"))
+write_excel_csv(
+        bind_rows(lab_concentration_stats$anova,
+                  lab_delta_stats$anova,
+                  lab_qe_stats$anova),
+        file.path(tables_dir, "lab_level_anova_overview.csv")
+)
+
+lab_pairwise_abs <- map_dfr(
+        c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3"),
+        ~ map_dfr(c("Indoor", "Outdoor_NE", "Outdoor_SW"),
+                  function(l) pairwise_compare_group(lab_long_v, .x, l))
+)
+lab_pairwise_delta <- map_dfr(
+        c("delta_CO2", "delta_CH4", "delta_NH3"),
+        ~ map_dfr(c("Outdoor_NE", "Outdoor_SW"),
+                  function(l) pairwise_compare_group(lab_long_v, .x, l))
+)
+lab_pairwise_qe <- map_dfr(
+        c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"),
+        ~ map_dfr(c("Outdoor_NE", "Outdoor_SW"),
+                  function(l) pairwise_compare_group(lab_long_v, .x, l))
+)
+
+lab_pairwise_tbl <- bind_rows(lab_pairwise_abs, lab_pairwise_delta, lab_pairwise_qe)
+write_excel_csv(lab_pairwise_tbl,
+                file.path(tables_dir, "pairwise_ccc_labs.csv"))
+
+lab_reference_qe <- reference_lab_compare(
+        lab_long_v,
+        vars = c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"),
+        locs = c("Outdoor_NE", "Outdoor_SW"),
+        reference_lab = LAB_BASELINE
+)
+write_excel_csv(lab_reference_qe,
+                file.path(tables_dir, "reference_labC_deming_qe.csv"))
+
+reference_lab_scatter_panels(
+        lab_long_v, lab_reference_qe, "Q_vent",
+        locs = c("Outdoor_NE", "Outdoor_SW"),
+        reference_lab = LAB_BASELINE,
+        file = "reference_labC_deming_Q.png"
+)
+reference_lab_scatter_panels(
+        lab_long_v, lab_reference_qe, "e_CH4_ghLU",
+        locs = c("Outdoor_NE", "Outdoor_SW"),
+        reference_lab = LAB_BASELINE,
+        file = "reference_labC_deming_e_CH4.png"
+)
+reference_lab_scatter_panels(
+        lab_long_v, lab_reference_qe, "e_NH3_ghLU",
+        locs = c("Outdoor_NE", "Outdoor_SW"),
+        reference_lab = LAB_BASELINE,
+        file = "reference_labC_deming_e_NH3.png"
+)
+
+lab_tukey_abs <- tukey_table(
+        lab_plot_long,
+        vars = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"),
+        locs = c("Indoor","Outdoor_NE","Outdoor_SW")
+)
+lab_tukey_delta <- tukey_table(
+        lab_plot_long,
+        vars = c("delta_CO2","delta_CH4","delta_NH3"),
+        locs = c("Outdoor_NE","Outdoor_SW")
+)
+lab_tukey_qe <- tukey_table(
+        lab_plot_long,
+        vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+        locs = c("Outdoor_NE","Outdoor_SW")
+)
+
+write_excel_csv(lab_tukey_abs,
+                file.path(tables_dir, "tukey_concentrations_labs_long.csv"))
+write_excel_csv(lab_tukey_delta,
+                file.path(tables_dir, "tukey_delta_concentrations_labs_long.csv"))
+write_excel_csv(lab_tukey_qe,
+                file.path(tables_dir, "tukey_ventilation_emission_labs_long.csv"))
+
+lab_conc_plot_df <- build_pairwise_plot_data(
+        tukey_tbl = lab_tukey_abs,
+        df_long = lab_plot_long,
+        vars = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"),
+        locs = c("Indoor","Outdoor_NE","Outdoor_SW"),
+        analyser_order = LAB_ORDER
+)
+lab_delta_plot_df <- build_pairwise_plot_data(
+        tukey_tbl = lab_tukey_delta,
+        df_long = lab_plot_long,
+        vars = c("delta_CO2","delta_CH4","delta_NH3"),
+        locs = c("Outdoor_NE","Outdoor_SW"),
+        analyser_order = LAB_ORDER
+)
+lab_qe_plot_df <- build_pairwise_plot_data(
+        tukey_tbl = lab_tukey_qe,
+        df_long = lab_plot_long,
+        vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+        locs = c("Outdoor_NE","Outdoor_SW"),
+        analyser_order = LAB_ORDER
+)
+
+plot_pairwise_matrix(
+        lab_conc_plot_df,
+        vars = c("CO2_mgm3","CH4_mgm3","NH3_mgm3"),
+        locs = c("Indoor","Outdoor_NE","Outdoor_SW"),
+        analyser_order = LAB_ORDER,
+        file_name = "pairwise_tukey_rd_concentrations_labs.png",
+        width = 16, height = 12,
+        fixed_aspect = FALSE
+)
+plot_pairwise_matrix(
+        lab_delta_plot_df,
+        vars = c("delta_CO2","delta_CH4","delta_NH3"),
+        locs = c("Outdoor_NE","Outdoor_SW"),
+        analyser_order = LAB_ORDER,
+        file_name = "pairwise_tukey_rd_delta_labs.png",
+        width = 16, height = 12,
+        fixed_aspect = FALSE
+)
+plot_pairwise_matrix(
+        lab_qe_plot_df,
+        vars = c("Q_vent","e_CH4_ghLU","e_NH3_ghLU"),
+        locs = c("Outdoor_NE","Outdoor_SW"),
+        analyser_order = LAB_ORDER,
+        file_name = "pairwise_tukey_rd_qe_labs.png",
+        width = 16, height = 12,
+        fixed_aspect = FALSE
+)
+
+heatmap_ccc_labs(
+        lab_pairwise_abs,
+        c("CO2_mgm3", "CH4_mgm3", "NH3_mgm3"),
+        VAR_LABELS_PLAIN,
+        "pairwise_ccc_concentration_labs.png"
+)
+heatmap_ccc_labs(
+        lab_pairwise_delta,
+        c("delta_CO2", "delta_CH4", "delta_NH3"),
+        VAR_LABELS_PLAIN,
+        "pairwise_ccc_delta_labs.png",
+        location_filter = c("Outdoor_NE", "Outdoor_SW"),
+        location_label_map = LOC_DATASET_LABELS
+)
+heatmap_ccc_labs(
+        lab_pairwise_qe,
+        c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"),
+        VAR_LABELS_PLAIN,
+        "pairwise_ccc_qe_labs.png",
+        location_filter = c("Outdoor_NE", "Outdoor_SW"),
+        location_label_map = LOC_DATASET_LABELS
+)
+
+lab_stats_report <- c(
+        "Lab-level statistics use one representative analyser per lab. Lab_A is restricted to CRDS.1 and Lab_B to CRDS.2, while Labs C, D and E retain their single analyser.",
+        sprintf("Reference lab for RD and Tukey reporting: %s", LAB_BASELINE),
+        "",
+        "ANOVA panels:",
+        bind_rows(lab_concentration_stats$anova,
+                  lab_delta_stats$anova,
+                  lab_qe_stats$anova) %>%
+                mutate(
+                        F_value = round(F_value, 3),
+                        p_value = scales::pvalue(p_value, accuracy = 0.001),
+                        location = recode(location, !!!LOC_LABELS)
+                ) %>%
+                transmute(line = sprintf("%s at %s: F(%s, %s) = %s, p = %s",
+                                         recode(variable,
+                                                "CO2_mgm3" = "cCO2",
+                                                "CH4_mgm3" = "cCH4",
+                                                "NH3_mgm3" = "cNH3",
+                                                "delta_CO2" = "deltaCO2",
+                                                "delta_CH4" = "deltaCH4",
+                                                "delta_NH3" = "deltaNH3",
+                                                "Q_vent" = "Q",
+                                                "e_CH4_ghLU" = "eCH4",
+                                                "e_NH3_ghLU" = "eNH3"),
+                                         location, df_1, df_2, F_value, p_value)) %>%
+                pull(line)
+)
+write_lines(lab_stats_report,
+            file.path(report_dir, "lab_level_statistics_summary.txt"))
 
 #### 17. Wind characterisation ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â daily campaign + seasonal historical         ####
 # Two polar-bar plots. In both, bars are stacked by wind-speed bin and each
@@ -2588,16 +3437,16 @@ plot_pairwise_matrix(qe_sw_plot_df %>% filter(location == "Outdoor_SW"),
 #                            (Summer 2024 -> Autumn 2024 -> Winter 2024/25
 #                            -> Spring 2025 up to 07.04.2025)
 
-# Shared wind-speed bins + colour palette (Figure-2 reference style:
-# burgundy at low speeds -> blue at high speeds).
+# Shared wind-speed bins + colour palette:
+# blue/green at low speeds -> red at high speeds.
 WS_BREAKS  <- c(0, 0.5, 1.0, 2.0, 3.0, 4.0, Inf)
 WS_LABELS  <- c("0.0-0.5","0.5-1.0","1.0-2.0","2.0-3.0","3.0-4.0",">=4.0")
-WS_COLOURS <- c("0.0-0.5" = "#8C1838",   # dark wine
-                "0.5-1.0" = "#E04344",   # red
-                "1.0-2.0" = "#F49649",   # orange
-                "2.0-3.0" = "#E3E394",   # pale yellow-green
-                "3.0-4.0" = "#4DBC8E",   # teal-green
-                ">=4.0"   = "#3E81BA")   # blue
+WS_COLOURS <- c("0.0-0.5" = "#3E81BA",   # blue
+                "0.5-1.0" = "#4DBC8E",   # teal-green
+                "1.0-2.0" = "#A8D98D",   # light green
+                "2.0-3.0" = "#F1E38A",   # yellow
+                "3.0-4.0" = "#F49649",   # orange
+                ">=4.0"   = "#E04344")   # red
 
 # Read the FULL wind series (campaign window + historical year).
 wind_full <- read.csv(file.path(meta_dir, "USA_mast_wind/20240101_20250825_USA_mast_16_hourly_uvw_wd_ws.csv"),
@@ -2625,46 +3474,22 @@ daily_totals <- daily_stack %>%
         summarise(total_n   = sum(n_bin),
                   total_pct = sum(pct),
                   .groups   = "drop")
-# Annotate ONLY the most prevalent sector per day, with the share as "X.X%".
-daily_top <- daily_totals %>%
-        group_by(day_label) %>%
-        slice_max(total_pct, n = 1, with_ties = FALSE) %>%
-        ungroup() %>%
-        mutate(label = sprintf("%.1f%%", total_pct))
 
 # Order panels chronologically (dd.mm.yyyy string sort wouldn't be chronological).
 day_levels   <- daily_data %>% distinct(day = as.Date(DATE.TIME), day_label) %>%
         arrange(day) %>% pull(day_label)
 daily_stack <- daily_stack %>% mutate(day_label = factor(day_label, levels = day_levels))
-daily_top   <- daily_top   %>% mutate(day_label = factor(day_label, levels = day_levels))
 
 # Ring labels ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â placed at the S compass position so they sit on each ring
 # radius going outward from the centre. One copy per panel.
-RING_STEPS_DAILY <- c(20, 40, 60, 80)
-ring_labels_daily <- expand.grid(day_label = factor(day_levels, levels = day_levels),
-                                 y_value   = RING_STEPS_DAILY,
-                                 stringsAsFactors = FALSE) %>%
-        mutate(label       = sprintf("%d%%", y_value),
-               wind_sector = factor("S", levels = c("N","NE","E","SE","S","SW","W","NW")))
-
 daily_rose <- ggplot(daily_stack, aes(x = wind_sector, y = pct, fill = ws_bin)) +
         geom_col(color = "black", linewidth = 0.2, width = 0.95) +
-        geom_text(data = ring_labels_daily,
-                  aes(x = wind_sector, y = y_value, label = label),
-                  color = "grey30", size = 3.3, inherit.aes = FALSE) +
-        geom_text(data = daily_top,
-                  aes(x = wind_sector,
-                      y = pmin(total_pct + 4, 88),
-                      label = label),
-                  color = "#1F4E79", size = 5.0,
-                  fontface = "bold", inherit.aes = FALSE) +
         coord_polar(start = -pi / 8) +
         facet_wrap(~ day_label, nrow = 1) +
         scale_fill_manual(values = WS_COLOURS, drop = FALSE,
                           name = expression("Wind speed (m s"^-1*")"),
                           guide = guide_legend(nrow = 1, byrow = TRUE)) +
-        scale_y_continuous(limits = c(0, 80),
-                           breaks = RING_STEPS_DAILY) +
+        scale_y_continuous(labels = scales::label_percent(scale = 1, accuracy = 1)) +
         labs(x = NULL, y = NULL) +
         theme_bw(base_size = 14) +
         theme(legend.position  = "bottom",
@@ -2678,6 +3503,47 @@ daily_rose <- ggplot(daily_stack, aes(x = wind_sector, y = pct, fill = ws_bin)) 
               legend.title     = element_text(size = 14))
 ggsave(file.path(plots_dir, "wind_rose_daily.png"), daily_rose,
        width = 24, height = 4.8, dpi = 300, bg = "white")
+
+# --- (a2) Campaign-average wind rose for 08.04.2025 12:00 to 14.04.2025 12:00 ---
+campaign_data <- wind_full %>%
+        filter(DATE.TIME >= start_time, DATE.TIME <= end_time) %>%
+        mutate(period_label = "08.04.2025 12:00 to 14.04.2025 12:00") %>%
+        group_by(period_label) %>% mutate(period_total = n()) %>% ungroup()
+
+campaign_stack <- campaign_data %>%
+        group_by(period_label, period_total, wind_sector, ws_bin) %>%
+        summarise(n_bin = n(), .groups = "drop") %>%
+        mutate(pct = 100 * n_bin / period_total)
+
+campaign_totals <- campaign_stack %>%
+        group_by(period_label, wind_sector) %>%
+        summarise(total_n = sum(n_bin),
+                  total_pct = sum(pct),
+                  .groups = "drop")
+
+campaign_rose <- ggplot(campaign_stack, aes(x = wind_sector, y = pct, fill = ws_bin)) +
+        geom_col(color = "black", linewidth = 0.2, width = 0.95) +
+        coord_polar(start = -pi / 8) +
+        facet_wrap(~ period_label, nrow = 1) +
+        scale_fill_manual(values = WS_COLOURS, drop = FALSE,
+                          name = expression("Wind speed (m s"^-1*")"),
+                          guide = guide_legend(nrow = 1, byrow = TRUE)) +
+        scale_y_continuous(labels = scales::label_percent(scale = 1, accuracy = 1)) +
+        labs(x = NULL, y = NULL) +
+        theme_bw(base_size = 14) +
+        theme(legend.position  = "bottom",
+              strip.text       = element_text(face = "bold", size = 14),
+              strip.background = element_rect(fill = "grey95"),
+              axis.text.x      = element_text(size = 17),
+              axis.text.y      = element_text(size = 9, colour = "grey35"),
+              axis.ticks.y     = element_blank(),
+              panel.grid.minor = element_blank(),
+              legend.text      = element_text(size = 9),
+              legend.title     = element_text(size = 10),
+              legend.key.size  = unit(0.65, "lines"),
+              legend.box.margin = margin(0, 0, 0, 0))
+ggsave(file.path(plots_dir, "wind_rose_campaign.png"), campaign_rose,
+       width = 7.8, height = 5.4, dpi = 300, bg = "white")
 
 # --- (b) Seasonal wind roses for the year preceding the campaign -------------
 SEASON_RANGES <- tibble::tribble(
@@ -2708,47 +3574,22 @@ seasonal_totals <- seasonal_stack %>%
         summarise(total_n   = sum(n_bin),
                   total_pct = sum(pct),
                   .groups   = "drop")
-# Annotate ONLY the most prevalent sector per season, with the share as "X.X%".
-seasonal_top <- seasonal_totals %>%
-        group_by(season) %>%
-        slice_max(total_pct, n = 1, with_ties = FALSE) %>%
-        ungroup() %>%
-        mutate(label = sprintf("%.1f%%", total_pct))
-
-RING_STEPS_SEASONAL <- c(10, 20, 30, 40)
-ring_labels_seasonal <- expand.grid(
-        season  = factor(SEASON_RANGES$season_label,
-                         levels = SEASON_RANGES$season_label),
-        y_value = RING_STEPS_SEASONAL,
-        stringsAsFactors = FALSE) %>%
-        mutate(label       = sprintf("%d%%", y_value),
-               wind_sector = factor("S", levels = c("N","NE","E","SE","S","SW","W","NW")))
 
 seasonal_rose <- ggplot(seasonal_stack, aes(x = wind_sector, y = pct, fill = ws_bin)) +
         geom_col(color = "black", linewidth = 0.2, width = 0.95) +
-        geom_text(data = ring_labels_seasonal,
-                  aes(x = wind_sector, y = y_value, label = label),
-                  color = "grey30", size = 3.0, inherit.aes = FALSE) +
-        geom_text(data = seasonal_top,
-                  aes(x = wind_sector,
-                      y = pmin(total_pct + 3, 88),
-                      label = label),
-                  color = "#1F4E79", size = 4.6,
-                  fontface = "bold", inherit.aes = FALSE) +
         coord_polar(start = -pi / 8) +
         facet_wrap(~ season, nrow = 1) +
         scale_fill_manual(values = WS_COLOURS, drop = FALSE,
                           name = expression("Wind speed (m s"^-1*")"),
                           guide = guide_legend(nrow = 1, byrow = TRUE)) +
-        scale_y_continuous(limits = c(0, 40),
-                           breaks = RING_STEPS_SEASONAL) +
+        scale_y_continuous(labels = scales::label_percent(scale = 1, accuracy = 1)) +
         labs(x = NULL, y = NULL) +
         theme_bw(base_size = 14) +
         theme(legend.position  = "bottom",
               strip.text       = element_text(face = "bold", size = 14),
               strip.background = element_rect(fill = "grey95"),
               axis.text.x      = element_text(size = 13),
-              axis.text.y      = element_blank(),
+              axis.text.y      = element_text(size = 9, colour = "grey35"),
               axis.ticks.y     = element_blank(),
               panel.grid.minor = element_blank(),
               legend.text      = element_text(size = 13),
@@ -2839,8 +3680,14 @@ write_section(r3, "Time fraction each line spends in each contamination class",
               paste(capture.output(print(
                       line_time_class %>% as.data.frame(), row.names = FALSE)),
                     collapse = "\n"))
+write_section(r3, "Interpretation after wind-timestamp correction",
+              paste(
+                      "The mast-wind timestamps were shifted by -2 h relative to the raw ultrasonic u/v series before the final analysis.",
+                      "After this correction, Outdoor_NE still remained higher than Outdoor_SW mainly under the NE, E and SE sectors.",
+                      "Therefore, mast-based wind direction alone did not explain the outdoor-line contrast, and wind sector was retained only as an explanatory covariate rather than a deterministic contamination classifier."
+              ))
 write_section(r3, "Decision",
-              sprintf("Retained outdoor: %s (less time downwind of LVAT + neighbour sources)\nDropped outdoor:  %s",
+              sprintf("Retained outdoor: %s (lower concentrations overall and less frequently affected under the combined practical and meteorological screening)\nDropped outdoor:  %s",
                       RETAINED_OUTDOOR, DROPPED_OUTDOOR))
 
 # --- Report 4: Q and emission headline numbers ---
@@ -2877,14 +3724,6 @@ write_section(r5, "Pairwise regression + Lin's CCC (mean per variable group)",
                               as.data.frame(), row.names = FALSE)),
                     collapse = "\n"))
 
-# --- Report 6: FTIR.4_old library check ---
-r6 <- init_report("06_FTIR4_library_check.txt",
-                  "FTIR.4_old vs FTIR.4 library re-evaluation (R2.7)")
-write_section(r6, "Per gas x location",
-              paste(capture.output(print(as.data.frame(lib_compare),
-                                          row.names = FALSE)),
-                    collapse = "\n"))
-
 # --- Report 7: campaign overview + preprocessing loss ---
 r7 <- init_report("07_campaign_overview_and_loss.txt",
                   "Campaign overview and preprocessing loss")
@@ -2900,10 +3739,6 @@ write_section(r7, "Pre-hourly outlier-removal loss",
 # --- Report 8: plausibility diagnostics ---
 r8 <- init_report("08_plausibility_diagnostics.txt",
                   "Plausibility diagnostics")
-write_section(r8, "FTIR.4_old versus corrected FTIR.4",
-              paste(capture.output(print(as.data.frame(lib_compare),
-                                          row.names = FALSE)),
-                    collapse = "\n"))
 write_section(r8, "FTIR.2 NH3 offset note",
               paste("FTIR.2 showed a positive NH3 concentration offset.",
                     "The offset was not corrected directly because it largely cancelled in delta NH3 and",
@@ -2957,6 +3792,318 @@ write_section(r11, "Tukey HSD ventilation and emissions",
               paste(capture.output(print(as.data.frame(tukey_qe),
                                           row.names = FALSE)),
                     collapse = "\n"))
+
+#### 19.5 Factor sensitivity analysis                                         ####
+build_sensitivity_long <- function(df_wide, family = c("lab", "analyser")) {
+        family <- match.arg(family)
+
+        base_df <- df_wide %>%
+                mutate(
+                        DATE.TIME = as.POSIXct(DATE.TIME, tz = "UTC"),
+                        time_id = factor(DATE.TIME),
+                        hour_factor = factor(sprintf("%02d", as.integer(hour)),
+                                             levels = sprintf("%02d", 0:23)),
+                        wind_sector = deg_to_compass8(wd_mst),
+                        wind_sector = factor(wind_sector,
+                                             levels = c("N","NE","E","SE","S","SW","W","NW"))
+                )
+
+        if (family == "lab") {
+                base_df <- base_df %>%
+                        mutate(lab = factor(as.character(lab_code), levels = LAB_ORDER))
+        } else {
+                base_df <- base_df %>%
+                        filter(!is.na(analyser), analyser != "FTIR.4_old") %>%
+                        mutate(
+                                analyser = factor(analyser,
+                                                  levels = c("CRDS.1","CRDS.2","CRDS.3",
+                                                             "FTIR.1","FTIR.2","FTIR.3","FTIR.4"))
+                        )
+        }
+
+        keep_id <- c("DATE.TIME", "time_id", "hour_factor", "wind_sector",
+                     "n_dairycows_in", "temp_in", "Y1_milk_prod", "ws_mst")
+        keep_id <- c(keep_id, if (family == "lab") "lab" else "analyser")
+
+        base_df %>%
+                select(all_of(keep_id),
+                       Q_vent_N, Q_vent_S,
+                       e_CH4_ghLU_N, e_CH4_ghLU_S,
+                       e_NH3_ghLU_N, e_NH3_ghLU_S) %>%
+                pivot_longer(
+                        cols = c(Q_vent_N, Q_vent_S,
+                                 e_CH4_ghLU_N, e_CH4_ghLU_S,
+                                 e_NH3_ghLU_N, e_NH3_ghLU_S),
+                        names_to = c("response", "suffix"),
+                        names_pattern = "^(Q_vent|e_CH4_ghLU|e_NH3_ghLU)_([NS])$",
+                        values_to = "value"
+                ) %>%
+                mutate(
+                        dataset = factor(recode(suffix, "N" = "Outdoor_NE", "S" = "Outdoor_SW"),
+                                         levels = c("Outdoor_SW", "Outdoor_NE")),
+                        n_dairycows_z = safe_scale(n_dairycows_in),
+                        temp_in_z = safe_scale(temp_in),
+                        Y1_milk_prod_z = safe_scale(Y1_milk_prod),
+                        ws_mst_z = safe_scale(ws_mst)
+                ) %>%
+                filter(is.finite(value))
+}
+
+fit_factor_sensitivity_models <- function(df_long, family = c("lab", "analyser")) {
+        if (!requireNamespace("nlme", quietly = TRUE)) {
+                stop("Package 'nlme' is required for factor sensitivity models.")
+        }
+
+        family <- match.arg(family)
+        focal_term <- if (family == "lab") "lab" else "analyser"
+        rhs_terms <- c(focal_term, "dataset", "hour_factor", "wind_sector",
+                       "n_dairycows_z", "temp_in_z", "Y1_milk_prod_z", "ws_mst_z")
+
+        anova_rows <- list()
+        cont_rows <- list()
+        importance_rows <- list()
+
+        for (resp in c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU")) {
+                dat <- df_long %>%
+                        filter(response == resp) %>%
+                        select(all_of(c("value", "time_id", rhs_terms))) %>%
+                        tidyr::drop_na()
+
+                if (nrow(dat) < 30) next
+
+                full_formula <- as.formula(
+                        paste("value ~", paste(rhs_terms, collapse = " + "))
+                )
+
+                fit_reml <- nlme::lme(
+                        fixed = full_formula,
+                        random = ~ 1 | time_id,
+                        data = dat,
+                        method = "REML",
+                        na.action = na.omit,
+                        control = nlme::lmeControl(returnObject = TRUE)
+                )
+
+                anova_tbl <- anova(fit_reml, type = "marginal") %>%
+                        as.data.frame() %>%
+                        tibble::rownames_to_column("term") %>%
+                        as_tibble() %>%
+                        mutate(response = resp, family = family, .before = 1)
+                anova_rows[[resp]] <- anova_tbl
+
+                fit_std <- nlme::lme(
+                        fixed = as.formula(
+                                paste("scale(value) ~", paste(rhs_terms, collapse = " + "))
+                        ),
+                        random = ~ 1 | time_id,
+                        data = dat,
+                        method = "REML",
+                        na.action = na.omit,
+                        control = nlme::lmeControl(returnObject = TRUE)
+                )
+
+                cont_tbl <- summary(fit_std)$tTable %>%
+                        as.data.frame() %>%
+                        tibble::rownames_to_column("term") %>%
+                        as_tibble() %>%
+                        filter(term %in% c("n_dairycows_z", "temp_in_z", "Y1_milk_prod_z", "ws_mst_z")) %>%
+                        mutate(response = resp, family = family, .before = 1)
+                cont_rows[[resp]] <- cont_tbl
+
+                fit_ml <- nlme::lme(
+                        fixed = full_formula,
+                        random = ~ 1 | time_id,
+                        data = dat,
+                        method = "ML",
+                        na.action = na.omit,
+                        control = nlme::lmeControl(returnObject = TRUE)
+                )
+                imp_tbl <- purrr::map_dfr(rhs_terms, function(term_drop) {
+                        reduced_terms <- setdiff(rhs_terms, term_drop)
+                        red_formula <- as.formula(
+                                paste("value ~", paste(reduced_terms, collapse = " + "))
+                        )
+                        fit_red <- nlme::lme(
+                                fixed = red_formula,
+                                random = ~ 1 | time_id,
+                                data = dat,
+                                method = "ML",
+                                na.action = na.omit,
+                                control = nlme::lmeControl(returnObject = TRUE)
+                        )
+                        cmp <- anova(fit_ml, fit_red)
+                        tibble(
+                                response = resp,
+                                family = family,
+                                term = term_drop,
+                                delta_AIC = AIC(fit_red) - AIC(fit_ml),
+                                LR = cmp$L.Ratio[2],
+                                p_value = cmp$`p-value`[2]
+                        )
+                })
+                importance_rows[[resp]] <- imp_tbl
+        }
+
+        list(
+                anova = bind_rows(anova_rows),
+                continuous = bind_rows(cont_rows),
+                importance = bind_rows(importance_rows)
+        )
+}
+
+factor_sensitivity_lab <- fit_factor_sensitivity_models(
+        build_sensitivity_long(emission_result_lab_v, family = "lab"),
+        family = "lab"
+)
+
+factor_sensitivity_analyser <- fit_factor_sensitivity_models(
+        build_sensitivity_long(emission_result_v, family = "analyser"),
+        family = "analyser"
+)
+
+write_excel_csv(factor_sensitivity_lab$anova,
+                file.path(tables_dir, "factor_sensitivity_lab_anova.csv"))
+write_excel_csv(factor_sensitivity_lab$continuous,
+                file.path(tables_dir, "factor_sensitivity_lab_continuous_effects.csv"))
+write_excel_csv(factor_sensitivity_lab$importance,
+                file.path(tables_dir, "factor_sensitivity_lab_term_importance.csv"))
+write_excel_csv(factor_sensitivity_analyser$anova,
+                file.path(tables_dir, "factor_sensitivity_analyser_anova.csv"))
+write_excel_csv(factor_sensitivity_analyser$continuous,
+                file.path(tables_dir, "factor_sensitivity_analyser_continuous_effects.csv"))
+write_excel_csv(factor_sensitivity_analyser$importance,
+                file.path(tables_dir, "factor_sensitivity_analyser_term_importance.csv"))
+
+summarise_factor_sensitivity <- function(anova_tbl, cont_tbl, imp_tbl, family_label) {
+        resp_labels <- c("Q_vent" = "Q", "e_CH4_ghLU" = "eCH4", "e_NH3_ghLU" = "eNH3")
+        cont_terms <- c("n_dairycows_z", "temp_in_z", "Y1_milk_prod_z", "ws_mst_z")
+
+        purrr::map_chr(c("Q_vent", "e_CH4_ghLU", "e_NH3_ghLU"), function(resp) {
+                imp_resp <- imp_tbl %>% filter(response == resp, term != "(Intercept)")
+                anova_resp <- anova_tbl %>% filter(response == resp)
+                cont_resp <- cont_tbl %>% filter(response == resp)
+
+                top_overall <- imp_resp %>% arrange(desc(delta_AIC)) %>% slice(1)
+                top_input <- imp_resp %>% filter(term %in% cont_terms) %>% arrange(desc(delta_AIC)) %>% slice(1)
+                top_beta <- cont_resp %>% mutate(abs_beta = abs(Value)) %>% arrange(desc(abs_beta)) %>% slice(1)
+
+                sig_terms <- anova_resp %>%
+                        filter(term %in% c(if (family_label == "lab") "lab" else "analyser",
+                                           "dataset", "hour_factor", "wind_sector", cont_terms),
+                               `p-value` < 0.05) %>%
+                        mutate(
+                                term_lab = dplyr::recode(term,
+                                                         "lab" = "lab",
+                                                         "analyser" = "analyser",
+                                                         "dataset" = "outdoor dataset",
+                                                         "hour_factor" = "hour",
+                                                         "wind_sector" = "wind sector",
+                                                         "n_dairycows_z" = "n_dairycows_in",
+                                                         "temp_in_z" = "temp_in",
+                                                         "Y1_milk_prod_z" = "Y1_milk_prod",
+                                                         "ws_mst_z" = "wind speed")
+                        ) %>%
+                        pull(term_lab)
+
+                sprintf(
+                        "%s (%s model): strongest contributor by deltaAIC = %s (deltaAIC = %.1f, p = %s); strongest input parameter = %s (deltaAIC = %.1f, p = %s); largest standardised input effect = %s (beta = %.3f, p = %s). Significant terms: %s.",
+                        resp_labels[[resp]],
+                        family_label,
+                        dplyr::recode(top_overall$term,
+                                      "lab" = "lab",
+                                      "analyser" = "analyser",
+                                      "dataset" = "outdoor dataset",
+                                      "hour_factor" = "hour",
+                                      "wind_sector" = "wind sector",
+                                      "n_dairycows_z" = "n_dairycows_in",
+                                      "temp_in_z" = "temp_in",
+                                      "Y1_milk_prod_z" = "Y1_milk_prod",
+                                      "ws_mst_z" = "wind speed"),
+                        top_overall$delta_AIC,
+                        scales::pvalue(top_overall$p_value, accuracy = 0.001),
+                        dplyr::recode(top_input$term,
+                                      "n_dairycows_z" = "n_dairycows_in",
+                                      "temp_in_z" = "temp_in",
+                                      "Y1_milk_prod_z" = "Y1_milk_prod",
+                                      "ws_mst_z" = "wind speed"),
+                        top_input$delta_AIC,
+                        scales::pvalue(top_input$p_value, accuracy = 0.001),
+                        dplyr::recode(top_beta$term,
+                                      "n_dairycows_z" = "n_dairycows_in",
+                                      "temp_in_z" = "temp_in",
+                                      "Y1_milk_prod_z" = "Y1_milk_prod",
+                                      "ws_mst_z" = "wind speed"),
+                        top_beta$Value,
+                        scales::pvalue(top_beta$`p-value`, accuracy = 0.001),
+                        paste(sig_terms, collapse = ", ")
+                )
+        })
+}
+
+write_lines(
+        c(
+                "Factor sensitivity analysis across Outdoor_NE and Outdoor_SW datasets",
+                "Wind-sector note: after correcting mast-wind timestamps by -2 h, Outdoor_NE remained higher than Outdoor_SW mainly under NE/E/SE sectors, so wind sector is treated as an explanatory covariate rather than a deterministic contamination classifier.",
+                "Lab model: response ~ lab + outdoor dataset + hour + wind sector + n_dairycows_in + temp_in + Y1_milk_prod + wind speed + (1 | time_id)",
+                summarise_factor_sensitivity(
+                        factor_sensitivity_lab$anova,
+                        factor_sensitivity_lab$continuous,
+                        factor_sensitivity_lab$importance,
+                        "lab"
+                ),
+                "",
+                "Analyser model: response ~ analyser + outdoor dataset + hour + wind sector + n_dairycows_in + temp_in + Y1_milk_prod + wind speed + (1 | time_id)",
+                summarise_factor_sensitivity(
+                        factor_sensitivity_analyser$anova,
+                        factor_sensitivity_analyser$continuous,
+                        factor_sensitivity_analyser$importance,
+                        "analyser"
+                )
+        ),
+        file.path(report_dir, "factor_sensitivity_summary.txt")
+)
+
+retired_plot_files <- c(
+        "outdoor_NE_vs_SW_RPD_by_sector.png",
+        "d_boxplot_Outdoor_NE.png", "d_boxplot_Outdoor_SW.png",
+        "d_mean_ci_Outdoor_NE.png", "d_mean_ci_Outdoor_SW.png",
+        "d_trend_plot_Outdoor_NE.png", "d_trend_plot_Outdoor_SW.png",
+        "q_e_boxplot_Outdoor_NE.png", "q_e_boxplot_Outdoor_SW.png",
+        "q_e_mean_ci_Outdoor_NE.png", "q_e_mean_ci_Outdoor_SW.png",
+        "q_e_trend_plot_Outdoor_NE.png", "q_e_trend_plot_Outdoor_SW.png",
+        "c_BlandAltman_Indoor_AnalyserA.png", "c_BlandAltman_Indoor_AnalyserB.png",
+        "c_BlandAltman_Outdoor_NE_AnalyserA.png", "c_BlandAltman_Outdoor_NE_AnalyserB.png",
+        "c_BlandAltman_Outdoor_SW_AnalyserA.png", "c_BlandAltman_Outdoor_SW_AnalyserB.png",
+        "d_BlandAltman_Outdoor_NE_AnalyserA.png", "d_BlandAltman_Outdoor_NE_AnalyserB.png",
+        "d_BlandAltman_Outdoor_SW_AnalyserA.png", "d_BlandAltman_Outdoor_SW_AnalyserB.png",
+        "qe_BlandAltman_Outdoor_NE_AnalyserA.png", "qe_BlandAltman_Outdoor_NE_AnalyserB.png",
+        "qe_BlandAltman_Outdoor_SW_AnalyserA.png", "qe_BlandAltman_Outdoor_SW_AnalyserB.png",
+        "pairwise_tukey_rd_delta_Outdoor_NE.png", "pairwise_tukey_rd_delta_Outdoor_SW.png",
+        "pairwise_tukey_rd_qe_Outdoor_NE.png", "pairwise_tukey_rd_qe_Outdoor_SW.png",
+        "pairwise_ccc_delta_c_Outdoor_NE.png", "pairwise_ccc_delta_c_Outdoor_SW.png",
+        "pairwise_ccc_q_e_Outdoor_NE.png", "pairwise_ccc_q_e_Outdoor_SW.png",
+        "pairwise_regression_delta_CO2_Outdoor_NE.png", "pairwise_regression_delta_CO2_Outdoor_SW.png",
+        "pairwise_regression_delta_CH4_Outdoor_NE.png", "pairwise_regression_delta_CH4_Outdoor_SW.png",
+        "pairwise_regression_delta_NH3_Outdoor_NE.png", "pairwise_regression_delta_NH3_Outdoor_SW.png",
+        "pairwise_regression_Q_vent_Outdoor_NE.png", "pairwise_regression_Q_vent_Outdoor_SW.png",
+        "pairwise_regression_e_CH4_Outdoor_NE.png", "pairwise_regression_e_CH4_Outdoor_SW.png",
+        "pairwise_regression_e_NH3_Outdoor_NE.png", "pairwise_regression_e_NH3_Outdoor_SW.png",
+        "mixed_model_analyser_effect_Outdoor_SW.png"
+)
+walk(file.path(plots_dir, retired_plot_files), ~ if (file.exists(.x)) file.remove(.x))
+
+retired_table_files <- c(
+        "pairwise_regression_ccc.csv",
+        "pairwise_regression_ccc_labs.csv",
+        "mixed_model_analyser_effect_Outdoor_SW_anova.csv",
+        "mixed_model_analyser_effect_Outdoor_SW_fixed_effects.csv",
+        "mixed_model_analyser_effect_Outdoor_SW_random_effects.csv",
+        "mixed_model_analyser_effect_Outdoor_SW_effect_plot_data.csv"
+)
+walk(file.path(tables_dir, retired_table_files), ~ if (file.exists(.x)) file.remove(.x))
+
+retired_report_files <- c("mixed_model_analyser_effect_Outdoor_SW.txt")
+walk(file.path(report_dir, retired_report_files), ~ if (file.exists(.x)) file.remove(.x))
 
 #### 20. Console summary                                                      ####
 cat("\n===== V10 run summary =====\n")
