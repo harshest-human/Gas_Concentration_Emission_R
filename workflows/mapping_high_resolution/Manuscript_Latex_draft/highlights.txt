@@ -1,0 +1,5 @@
+High-resolution measurements revealed persistent vertical gas gradients.
+Top-only sampling overestimated all three barn-mean concentrations.
+Bottom-only sampling underestimated all three barn-mean concentrations.
+Top-and-bottom sampling reproduced the 51-location mean with CCC = 0.999.
+The reduced spatial network remained applicable over a longer campaign.

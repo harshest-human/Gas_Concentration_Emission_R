@@ -27,6 +27,39 @@ workflows/crds_routine_cleaning/*
 workflows/crds_routine_cleaning/scripts/*
 !workflows/crds_routine_cleaning/scripts/crds_weekly_cleaning.R
 
+# Allow mapping workflow code, metadata, manuscript sources, figures, and
+# publication plots. Raw and cleaned measurement data remain ignored.
+!workflows/mapping_high_resolution/
+workflows/mapping_high_resolution/*
+!workflows/mapping_high_resolution/scripts/
+workflows/mapping_high_resolution/scripts/*
+!workflows/mapping_high_resolution/scripts/*.R
+!workflows/mapping_high_resolution/meta_data/
+workflows/mapping_high_resolution/meta_data/*
+!workflows/mapping_high_resolution/meta_data/*.txt
+!workflows/mapping_high_resolution/plots/
+workflows/mapping_high_resolution/plots/*
+!workflows/mapping_high_resolution/plots/**/
+!workflows/mapping_high_resolution/plots/**/*.png
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/
+workflows/mapping_high_resolution/Manuscript_Latex_draft/*
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.tex
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.bib
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.md
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.txt
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.pdf
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/.vscode/
+workflows/mapping_high_resolution/Manuscript_Latex_draft/.vscode/*
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/.vscode/settings.json
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/figures/
+workflows/mapping_high_resolution/Manuscript_Latex_draft/figures/*
+!workflows/mapping_high_resolution/Manuscript_Latex_draft/figures/*.png
+
+# Allow shared lightweight workflow utility functions.
+!workflows/utils/
+workflows/utils/*
+!workflows/utils/*.R
+
 # Allow device_comparison cleaning + plotting scripts (data subfolders stay
 # ignored so raw_data/, clean_data/, result_data/, meta_data/ are not committed).
 !workflows/device_comparison/
