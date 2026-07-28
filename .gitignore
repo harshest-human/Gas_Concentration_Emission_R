@@ -41,19 +41,19 @@ workflows/mapping_high_resolution/meta_data/*
 workflows/mapping_high_resolution/plots/*
 !workflows/mapping_high_resolution/plots/**/
 !workflows/mapping_high_resolution/plots/**/*.png
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/
-workflows/mapping_high_resolution/Manuscript_Latex_draft/*
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.tex
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.bib
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.md
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.txt
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/*.pdf
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/.vscode/
-workflows/mapping_high_resolution/Manuscript_Latex_draft/.vscode/*
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/.vscode/settings.json
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/figures/
-workflows/mapping_high_resolution/Manuscript_Latex_draft/figures/*
-!workflows/mapping_high_resolution/Manuscript_Latex_draft/figures/*.png
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/
+workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.tex
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.bib
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.md
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.txt
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.pdf
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/.vscode/
+workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/.vscode/*
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/.vscode/settings.json
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/figures/
+workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/figures/*
+!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/figures/*.png
 
 # Allow shared lightweight workflow utility functions.
 !workflows/utils/
