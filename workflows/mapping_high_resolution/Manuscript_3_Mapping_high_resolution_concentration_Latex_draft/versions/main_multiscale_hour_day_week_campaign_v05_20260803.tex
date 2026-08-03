@@ -111,82 +111,48 @@ SP & sampling point\\
 
 \section{Introduction}
 
-Emission estimates for naturally ventilated livestock buildings depend on
-both the air exchange rate and the concentration difference across the
-measurement boundary. Neither component is readily constrained because wind
-and buoyancy can reverse flow through large openings, while animals, manure
-surfaces, internal obstructions, and mechanical mixing devices generate local
-sources and transport pathways. Uncertainty in a concentration measurement is
-therefore not only analytical; it also includes whether the selected location
-represents the air volume or control surface of interest. These distinctions
-are important because a representative internal concentration is not
-necessarily representative of an emission flux when the corresponding airflow
-field is unknown \citep{Calvet2013,Ogink2013}.
+Concentrations measured in naturally ventilated livestock buildings are
+affected by unsteady wind-driven exchange, local sources, animal activity,
+building geometry, and imperfect internal mixing. Consequently, a
+concentration recorded at one position cannot automatically be assumed to
+represent the complete barn airspace. This representativeness is important
+both for characterising animal exposure and for calculating gaseous emissions
+with indirect balance methods.
 
-The consequences of imperfect mixing have been demonstrated under controlled
-and field conditions. In a mechanically ventilated test installation,
-ventilation-rate errors of up to 86\% arose when tracer concentrations from
-individual internal positions were used, although this value describes a
-tracer-gas ventilation estimate rather than a barn concentration or emission
-error \citep{VanBuggenhout2009}. Wind-tunnel measurements of a large naturally
-ventilated building likewise showed that emission estimates based on
-concentration and velocity at one constant height could differ markedly from
-vertically resolved measurements \citep{Janke2020}. These studies establish
-that the spatial arrangement of measurements can be as important as their
-nominal precision, but their controlled flow fields do not reproduce the full
-temporal variability of an occupied dairy barn.
+Spatial variability has been demonstrated in both the horizontal and vertical
+directions. In a naturally ventilated dairy cow barn, \citet{Mendes2015}
+reported height-dependent concentrations of \(\mathrm{NH_3}\),
+\(\mathrm{CO_2}\), and a released tracer gas, with mixing ratios becoming more
+stable above the animal-occupied zone. Measurements at three vertical
+locations in an open dairy barn also showed gas-specific profiles and only
+moderate correlations between some heights \citep{Durso2024}. Horizontal
+representativeness is similarly dependent on both the number and placement of
+sampling points. \citet{Durso2022} found that variability decreased when the
+number of horizontally distributed locations increased and that the distance
+between locations affected the resulting mean.
 
-Field studies have identified heterogeneity in both horizontal and vertical
-directions. Height-dependent differences in \(\mathrm{NH_3}\),
-\(\mathrm{CO_2}\), and tracer-gas mixing ratios were observed in a naturally
-ventilated dairy cow barn, with more consistent mixing above the
-animal-occupied zone \citep{Mendes2015}. Gas-specific vertical profiles and
-incomplete correlations among heights were also reported in an open-sided
-dairy barn \citep{Durso2024}. Horizontally, the mean and its variability were
-sensitive to the number and separation of sampling locations
-\citep{Durso2022}. External wind speed and direction further altered internal
-concentrations and air exchange in a site-specific manner
-\citep{Saha2013}. Consequently, a vertical profile observed at one horizontal
-position cannot be assumed to apply throughout a barn, nor can the behaviour
-of one gas be transferred directly to another.
+Increasing sampling density can reduce uncertainty, but it also increases
+equipment requirements, tubing, switching-cycle duration, data-processing
+effort, and the probability of sampling-system failure. In a naturally
+ventilated animal mock-up building, \citet{DeVogeleer2017} showed that the
+spatial pattern of sensors could be as influential as the number of sensors.
+Systematic reduction of a high-resolution wind-tunnel measurement grid
+similarly showed that concentration and velocity sensors positioned at only
+one height could produce large emission errors, whereas vertically composite
+sampling improved representativeness \citep{Janke2020}. More recently,
+information-based sensor selection has been shown to retain most predictive
+performance with substantially fewer strategically selected locations
+\citep{Chen2026}.
 
-Gas ratios provide an additional view of mixing because responses shared by
-two gases can partly cancel, whereas differences in source position,
-reactivity, or transport remain. Spatial variability in ammonia-to-tracer
-mixing ratios has shown that apparent agreement at one height can coexist with
-horizontal differences elsewhere in the building \citep{Mendes2015}.
-Simulation-based work has consequently investigated representative sampling
-heights \citep{Doumbia2021}, and information-based approaches have been used
-to identify non-redundant sensor locations across simulated ventilation cases
-\citep{Chen2026}. However, the latter approach was developed for
-CFD-derived local mean age of air and related flow variables; its direct
-transfer to sequential field measurements of gas concentration has not been
-established.
-
-Dense field sampling can characterise these patterns but increases tubing,
-switching-cycle duration, maintenance requirements, and the risk of sampling
-line failure. Conversely, reduction based only on sensor count or a geometric
-centre may discard vertical extremes or persistent local effects. Sampling
-density and spatial arrangement have both affected airflow estimates in a
-naturally ventilated mock-up building \citep{DeVogeleer2017}, yet evidence is
-limited on how a full-scale, three-dimensional concentration network can be
-reduced while retaining both its dense-network mean and meaningful spatial
-structure over extended field campaigns.
-
-Accordingly, three questions were addressed. First, how large and persistent
-is the spatial heterogeneity of \(\mathrm{CO_2}\), \(\mathrm{CH_4}\),
-\(\mathrm{NH_3}\), and their ratios across height, horizontal position, and
-temporal aggregation? It was hypothesised that location and height effects
-would be gas-specific and would persist most strongly for \(\mathrm{NH_3}\)
-and nitrogen-containing ratios. Second, can the middle locations be omitted
-while retaining both the dense-network concentration estimate and the
-observed vertical structure? It was hypothesised that a spatially distributed
-top-and-bottom design would agree more closely with the 51-location reference
-than either extreme alone while preserving vertical contrast. Third, can one
-physically eligible location provide a pragmatic approximation of the network
-mean? It was hypothesised that a stable candidate could be ranked, but that
-gas- and campaign-specific residual bias would preclude universal reference
-status.
+Available studies therefore indicate that dense sampling is valuable, but do
+not establish how a full-scale, multi-height concentration network can be
+reduced without losing the barn mean and its spatial heterogeneity under field
+conditions. The objective of this study was to quantify the spatial
+heterogeneity of \(\mathrm{CO_2}\), \(\mathrm{CH_4}\), and
+\(\mathrm{NH_3}\) in a naturally ventilated dairy barn and to test the
+hypothesis that a spatially distributed top-and-bottom configuration would
+reproduce the concentration statistics obtained from a 51-location,
+three-height reference design.
 
 \section{Materials and methods}
 
@@ -242,9 +208,7 @@ excluded from internal spatial comparisons.}
 
 Concentrations of \(\mathrm{CO_2}\), \(\mathrm{CH_4}\),
 \(\mathrm{NH_3}\), and water vapour were measured using two CRDS analysers
-(Picarro G2508; Picarro Inc., Santa Clara, CA, USA; CRDS8 and CRDS9) and two
-FTIR analysers (Gasmet CX4000; Gasmet Technologies Oy, Vantaa, Finland; FTIR1
-and FTIR2). Before the first
+(CRDS8 and CRDS9) and two FTIR analysers (FTIR1 and FTIR2). Before the first
 mapping campaign, all four analysers were operated for 24 h at a co-located
 central barn position. Two polytetrafluoroethylene sampling tubes were used:
 one was divided with a T-piece between the two CRDS analysers and the other
@@ -267,15 +231,11 @@ tested with certified cylinders containing approximately \SI{700}{ppm}
 \(\mathrm{CO_2}\), \SI{7}{ppm} \(\mathrm{CH_4}\), and \SI{5}{ppm}
 \(\mathrm{NH_3}\); deviations remained within the manufacturer-stated
 \(\pm 5\%\) accuracy. The field comparison was therefore used for
-cross-platform alignment under representative sampling conditions. The CRDS
-instruments were treated as the operational comparison scale, not as an
-absolute metrological reference. Consequently, the correction removed the
-observed mean platform offset but could not separate instrument-specific
-drift from spatial effects during the subsequent fixed analyser assignments.
+cross-platform harmonisation under representative sampling conditions.
 
 \subsection{Measurement campaigns and data processing}
 
-Campaign 1 data were recovered for June--August 2024. Concurrent ordered
+Campaign 1 data were recovered for June--August 2024. Simultaneous ordered
 cycling by all four analysers was identified from 3 June to 16 July and again
 from 1 to 26 August, with shorter interruptions retained as gaps. CRDS9
 sampled locations 1--16, FTIR2 sampled locations 17--26,
@@ -290,12 +250,6 @@ isolated three-minute steps; CRDS8 contained 26,099 four-minute steps and one
 three-minute step. For every three-minute step, \SI{120}{s} remained after
 the common \SI{60}{s} flushing period. Single-position and irregular
 sequences were retained in audit tables but excluded from the campaign data.
-FTIR exports were cleaned by removing repeated embedded headers and retaining
-the required timestamp, sampling-position, and gas fields. Their instrument
-timestamps were retained without an additional flushing operation. All
-timestamps were parsed in the Europe/Berlin time zone, duplicate combinations
-of timestamp, analyser, and location were removed within each campaign, and
-the retained rows were ordered by timestamp, analyser, and location.
 
 Campaign 2 was conducted from 16 November 2024 at 00:06:47 to 31 December
 2024 at 23:57:10 using CRDS8 and CRDS9. The 17 middle locations were omitted
@@ -443,14 +397,9 @@ corresponding operational records.
 
 All cleaning, calculations, and figures were produced in R version 4.5.3
 (R Foundation for Statistical Computing, Vienna, Austria). Data manipulation
-was conducted using \texttt{data.table}; mixed-effects and additive models
-were fitted using \texttt{lme4} and \texttt{mgcv}, respectively; clustering
-and silhouette analysis used \texttt{cluster}; regression trees used
-\texttt{rpart}; and figures were produced using \texttt{ggplot2}. The complete
-analysis code and intermediate summary tables were retained to permit the
-sampling configurations and ranking criteria to be reproduced. Top, middle,
-and bottom locations were displayed in orange, green, and light blue,
-respectively.
+was conducted using \texttt{data.table}, and figures were produced using
+\texttt{ggplot2}. Top, middle, and bottom locations were displayed in orange,
+green, and light blue, respectively.
 
 \section{Results}
 
@@ -702,195 +651,131 @@ light-blue symbols denote top and bottom locations, respectively.}
 
 \section{Discussion}
 
-\subsection{Gas-specific spatial structure}
+\subsection{Concentration heterogeneity and vertical structure}
 
-The measurements did not support homogeneous concentration fields within the
-investigated barn. Vertical differences were systematic at the network level,
-but their magnitude varied among gases and horizontal positions. This
-gas-specific structure is consistent with earlier field observations showing
-height-dependent \(\mathrm{NH_3}\), \(\mathrm{CO_2}\), and tracer-gas
-mixing ratios \citep{Mendes2015}, and with the incomplete agreement among
-three measurement heights reported for an open dairy barn
-\citep{Durso2024}. The present study extends that evidence by resolving the
-vertical comparison at 17 horizontal positions rather than at one or a few
-profiles.
+The full-scale measurements confirmed that the assumption of homogeneous gas
+concentrations was not supported throughout the barn volume. Concentrations
+were generally greater at the top than at the bottom, but the gradient varied
+among horizontal positions and gases. This gas-specific behaviour agrees with
+the vertical variability reported by \citet{Mendes2015} and
+\citet{Durso2024}. Those studies showed that vertical profiles cannot be
+generalised from one gas to another and that correlations among heights may
+remain incomplete. The present network extended this evidence from a limited
+number of vertical locations to 17 horizontally distributed triplets.
 
-Horizontal coverage remained important even when the vertical design was
-reduced. This agrees with \citet{Durso2022}, for whom both the number and
-spacing of horizontal locations affected the estimated concentration
-distribution. The current results further show why vertical and horizontal
-design cannot be considered independently: omission of one height may be
-acceptable for the spatial mean only when the retained heights remain
-distributed across the barn. The variance partitioning also demonstrated that
-this requirement was response-specific. Location explained a substantially
-larger fraction of variation in \(\mathrm{NH_3}\) and its ratios than in
-\(\mathrm{CO_2}\) or \(\mathrm{CH_4}\), indicating that a network adequate
-for one gas cannot automatically be assumed adequate for another.
+The differences among locations also support the horizontal-distribution
+findings of \citet{Durso2022}, who showed that an individual location was
+unlikely to provide a representative barn mean and that both the number and
+separation of locations affected variability. In the present barn, the
+contrast among the 17 horizontal positions was sufficiently large that
+vertical reduction was only successful when spatial coverage across the barn
+was retained.
 
-Several mechanisms are compatible with the observed patterns, although they
-were not measured directly in these campaigns. Carbon dioxide was dominated
-by a spatially distributed animal source, whereas methane included localised
-enteric release and ammonia was linked to manure-contaminated surfaces and
-gas--surface exchange. Wind direction, opening configuration, buoyancy, and
-fan operation could then transport or dilute these sources differently.
-External wind conditions have previously affected internal concentrations and
-air exchange in a naturally ventilated dairy building \citep{Saha2013}, but
-the absence of concurrent airflow-vector measurements prevents individual
-features in the present concentration maps from being attributed causally to
-a specific opening, fan, or flow path.
+\subsection{Why the top-and-bottom configuration was retained}
 
-\subsection{Information contained in the gas ratios}
+The middle-only configuration gave a comparatively small mean bias, but it did
+not preserve the vertical extremes. Selection of a network solely because it
+reproduces the overall mean would therefore conceal part of the spatial
+heterogeneity that the measurement system was intended to characterise. In
+contrast, the combined top-and-bottom configuration balanced the positive
+deviation at the top against the negative deviation at the bottom while
+retaining sensitivity to vertical gradients.
 
-The ratios were not interpreted as source signatures in isolation. Instead,
-they were used as diagnostics of whether gases varied proportionally across
-space and time. The comparatively small location fraction for
-\(\mathrm{CH_4}/\mathrm{CO_2}\) suggests that part of the spatial variation
-in these two animal-associated gases was shared. In contrast, the larger
-location fractions for \(\mathrm{NH_3}/\mathrm{CO_2}\) and
-\(\mathrm{NH_3}/\mathrm{CH_4}\) indicate that ammonia retained spatial
-behaviour not removed by normalisation to either carbon gas. This finding is
-consistent with the spatial variability of ammonia-to-tracer mixing ratios
-reported by \citet{Mendes2015} and reinforces the need to evaluate ratio
-stability rather than assume co-dispersion.
+This result is consistent with the general finding that sensor placement is
+not interchangeable with sensor number. \citet{DeVogeleer2017} demonstrated
+that configurations containing the same number of sensors could yield
+different accuracy because of their spatial pattern. \citet{Janke2020}
+reported particularly large errors when concentration and velocity were
+represented by one height and improved performance from vertically composite
+sampling. The present field measurements provide an analogous result for
+internal barn concentrations: retaining two vertically contrasting levels was
+more representative than retaining either level alone.
 
-Ratio interpretation remains conditional on the source distributions and
-background treatment. No background-corrected enhancement regression was
-applied, and the south-background location was excluded from the internal
-heterogeneity analysis. Consequently, the ratios quantify proportionality of
-the measured internal concentrations; they do not by themselves distinguish
-animal, manure, or ventilation contributions and should not be interpreted as
-emission factors.
+The near-unity CCC for the 34-location mean demonstrates that the reduction
+introduced little loss of information about the overall concentration.
+Nevertheless, agreement for the spatial heterogeneity metric was weaker than
+agreement for the mean. This distinction is important because a reduced
+network may reproduce the mean through compensating positive and negative
+deviations while slightly changing its description of spatial spread.
+Accordingly, both outcomes should be evaluated when sampling networks are
+optimised.
 
-\subsection{Temporal aggregation does not replace spatial coverage}
+\subsection{Implications for sensor-network optimisation}
 
-Aggregation reduced median absolute location error for all three gases, but
-the rate and remaining error differed. The stronger persistence of
-\(\mathrm{NH_3}\) relative to \(\mathrm{CO_2}\) and
-\(\mathrm{CH_4}\) was consistent with its larger location variance fraction.
-Thus, short-lived fluctuations were averaged out while stable or repeatedly
-occurring spatial contrasts remained. The result clarifies two different
-meanings of representativeness: a longer average can improve the precision of
-a location mean without removing its systematic displacement from the
-contemporaneous network mean.
+The reduction from 51 to 34 locations lowered the number of internal sampling
+points by one third without materially changing the two-hour barn mean.
+Campaign 2 subsequently showed that the reduced-height principle remained
+operational over a longer measurement period. This progression follows the
+sensor-network concept advanced by \citet{Chen2026}: a full network can first
+be used to identify informative spatial structure, after which a smaller
+network can be retained for routine monitoring.
 
-Whole-campaign variability should also not be read as the final point of a
-monotonic averaging sequence. The campaign CV was calculated from all valid
-observations and therefore retained diurnal and seasonal variation, whereas
-the daily and weekly CVs described variation among aggregated block means.
-The high whole-campaign CV therefore reflects a broader temporal domain, not a
-failure of weekly averaging. Sequential sampling adds a further limitation:
-rapid changes during a switching cycle can be aliased as spatial differences,
-and adsorption or delayed response is particularly relevant for ammonia
-\citep{Rom2010}. Complete two-hour blocks reduced, but could not eliminate,
-this temporal--spatial ambiguity.
+The design should not, however, be transferred directly to barns with
+different geometry or ventilation without validation. Optimal positions are
+expected to depend on openings, internal obstructions, source distribution,
+fans, wind direction, and the intended response variable. The present
+findings support a general procedure---dense initial mapping followed by
+objective reduction---rather than a universal requirement for exactly 34
+locations.
 
-\subsection{Reduction of the vertical network}
+The multiscale results further distinguish transient heterogeneity from
+persistent spatial structure. Aggregation markedly reduced CO2 and CH4 error,
+whereas NH3 retained comparatively large daily and weekly differences. The
+larger location variance fractions for NH3 and its ratios are consistent with
+local source and transport effects that are not removed by longer averaging.
+Consequently, increasing measurement duration cannot substitute completely
+for spatial coverage, particularly for ammonia.
 
-The middle-only design reproduced the dense-network mean comparatively well,
-but it suppressed the vertical extremes that defined the heterogeneity under
-investigation. The top-and-bottom design retained these extremes and allowed
-their opposing deviations to balance in the spatial mean. Its near-unity CCC
-and small bias demonstrate agreement with the 51-location reference estimate
-for the observed two-hour blocks; they do not prove that every local plume or
-measure of spatial spread was preserved.
-
-The finding is consistent with the broader observation that sensor placement
-is not interchangeable with sensor number. Different arrangements at the same
-sampling density produced different airflow estimates in a naturally
-ventilated mock-up building \citep{DeVogeleer2017}. Similarly, vertically
-composite concentration and velocity measurements were more representative
-than a single-height approach in a wind-tunnel study
-\citep{Janke2020}. Those studies concern airflow or emission estimation,
-whereas the present validation concerns internal concentration means. The
-agreement across these different outcomes supports vertically distributed
-sampling as a design principle, but does not make their numerical errors
-directly comparable.
-
-Campaign 2 demonstrated that a top-and-bottom network could be operated over
-a longer late-autumn and winter period. It did not provide an independent
-51-versus-34 validation because no simultaneous dense reference was present
-and two site-specific locations had also been removed. The evidence therefore
-supports a reduction from 51 to 34 locations within Campaign 1 and an
-operational 32-location application in Campaign 2, rather than a universal
-32-location optimum.
-
-\subsection{Information-based ranking and the single-point question}
-
-The entropy analysis adapted the information-based placement principle
-described by \citet{Chen2026}. In that study,
-sensor informativeness was evaluated across CFD scenarios using local mean age
-of air and related flow variables. Here, entropy described temporal diversity
-of observed gas concentrations at individual locations. It was therefore a
-diagnostic component rather than a direct implementation of the CFD-informed
-optimisation algorithm, and the reduced vertical design had been defined from
-the configuration comparison rather than selected by entropy alone.
-
-Likewise, the grouped-date predictive models showed only moderate out-of-date
-performance. This is scientifically informative: location, height, and clock
-time captured repeatable structure, but much of the hourly relative error
-remained unexplained. Weather, fan status, animal distribution, and barn
-microclimate are plausible omitted predictors. The models should therefore be
-viewed as pattern-recognition benchmarks, not operational concentration
-predictors.
-
-Location 25 was the best compromise among candidates that passed the
-predefined physical screen and were available in both campaigns. Its small
-carbon-gas biases support its use as a pragmatic single-point approximation
-within this barn. However, the \(\mathrm{NH_3}\) bias changed to +7.25\% in
-Campaign 2, demonstrating residual response- and campaign-dependence. A point
-that approximates the internal concentration mean is also not automatically
-suitable for emission calculation because flux depends jointly on
-concentration and airflow across a defined control surface
-\citep{Calvet2013,Ogink2013}. Location 25 should therefore be treated as a
-testable site-specific candidate rather than a reference standard.
+Location 25 provides a statistically and pragmatically defensible candidate
+when one reference point is required, but its winter NH3 bias demonstrates why
+the term ``reference'' must not be interpreted as ground truth. Its selection
+should be confirmed against the exact fan axes and intended measurement plane.
+Moreover, concentration representativeness alone does not establish suitability
+for emission calculation, which also depends on representative airflow and a
+defined control surface.
 
 \subsection{Limitations and future research}
 
-The principal limitations define the scope of inference. Campaign and season
-were partly confounded, with summer represented by Campaign 1 and late autumn
-and winter by Campaign 2. The four analysers were assigned to fixed spatial
-ranges, so analyser and location effects were not fully separable despite the
-co-located field comparison. The applied factors corrected mean FTIR--CRDS
-offsets but did not establish traceability to an absolute reference or remove
-subsequent drift. Sequential switching prevented an instantaneous
-three-dimensional snapshot, and the 51-location mean remained a dense-network
-reference estimate rather than a volume-weighted true concentration.
+Several limitations should be considered. First, Campaign 1 was conducted in
+summer and Campaign 2 in late autumn and winter; consequently, the complete
+range of seasonal ventilation conditions was not represented. Second, the
+four analysers were assigned to different location ranges. Although the
+preliminary co-located comparison was used to harmonise FTIR and CRDS values,
+analyser type and barn location were not completely separable during Campaign
+1. Third, sequential switching meant that all locations were not sampled at
+the exact same second. Two-hour complete blocks were therefore used to compare
+configurations. Fourth, the 51-location estimate was treated as the
+full-density reference rather than as an absolute true barn concentration.
 
-Future validation should randomise or exchange analyser assignments. Sampling
-line response should be quantified for the deployed tube lengths and flow
-rates, and reduced and dense networks should be compared concurrently in
-independent periods.
-Meteorological, fan, animal-distribution, and barn-climate variables should be
-aligned with the concentration blocks to test the proposed mechanisms.
-CFD could then be evaluated against the empirical spatial patterns and used to
-examine unmeasured airflow paths, but such modelling would constitute a new
-validation study rather than evidence produced here. Finally, emission
-applications require simultaneous assessment of representative airflow and
-concentration at an appropriate control surface; the present concentration
-ranking alone is insufficient for that purpose.
+The Campaign 2 network contained 32 rather than 34 locations because two
+locations were removed for identified site-specific problems. Therefore,
+Campaign 2 provided a longer-term application of the reduced principle but
+not an independent 51-versus-34 validation. Future investigations should
+combine simultaneous meteorological, animal, and barn-climate measurements
+with independent validation of strategically reduced networks.
 
 \section{Conclusions}
 
-Concentrations in the investigated naturally ventilated dairy barn remained
-heterogeneous across both height and horizontal position, and the persistence
-of that structure was gas-specific. Temporal aggregation reduced short-term
-location error but did not remove the comparatively strong spatial component
-of ammonia and its ratios. A measurement period should therefore not be
-lengthened as a substitute for spatial coverage without first demonstrating
-that the remaining location bias is acceptable for the intended gas and
-outcome.
+Gas concentrations in the investigated naturally ventilated dairy barn were
+heterogeneous in both the vertical and horizontal directions. Measurements
+from only the top systematically overrepresented the full-density mean,
+whereas measurements from only the bottom systematically underrepresented it.
+The middle height reproduced the overall mean more closely but did not retain
+the observed vertical extremes.
 
-The dense campaign showed that a distributed top-and-bottom configuration
-could preserve the internal \(\mathrm{CO_2}\), \(\mathrm{CH_4}\), and
-\(\mathrm{NH_3}\) reference means while retaining vertical contrast and
-reducing sampling effort. Dense initial mapping followed by explicit,
-response-specific configuration testing is therefore supported as a practical
-design strategy. A single physically screened location could provide a useful
-site-specific approximation, but it could not replace spatial averaging or be
-assumed representative of emission flux. Independent seasonal validation with
-concurrent airflow and operational measurements remains necessary before the
-reduced configuration or single-point candidate is transferred beyond this
-barn.
+A spatially distributed top-and-bottom network preserved the mean
+\(\mathrm{CO_2}\), \(\mathrm{CH_4}\), and \(\mathrm{NH_3}\)
+concentrations obtained from the full 51-location design while reducing the
+number of internal locations by one third. Dense initial mapping followed by
+quantitative configuration testing provides a defensible route for reducing
+sampling effort without assuming homogeneous mixing.
+
+Spatial differences converged as averaging duration increased, but persistent
+NH3 heterogeneity remained. Under pre-specified physical and statistical
+criteria, location 25 was the most representative eligible single point across
+the two campaigns. It should be treated as a pragmatic candidate rather than a
+replacement for spatial averaging or as an automatically valid emission
+measurement point.
 
 \section*{Acknowledgements}
 
