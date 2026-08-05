@@ -43,7 +43,7 @@ read_analyser <- function(path, id) {
       Date.Time = ymd_hms(created_at, tz = "UTC", quiet = TRUE),
       analyser = if_else(id == "46", "46_out", id),
       analyser_model = "OTICE_v5_LoRA",
-      TB600_NH3 = as.numeric(field1),
+      NH3 = as.numeric(field1) / 100,
       TB600_Air_Temperature = as.numeric(field2),
       TB600_Air_Relative_Humidity = as.numeric(field3),
       EE894_CO2_Average = as.numeric(field5),
@@ -64,7 +64,7 @@ clean_data <- bind_rows(Map(read_analyser, selected_files, selected_ids)) %>%
 if (nrow(clean_data) == 0) stop("No observations remained after date filtering.")
 
 measurement_columns <- c(
-  "TB600_NH3", "TB600_Air_Temperature", "TB600_Air_Relative_Humidity",
+  "NH3", "TB600_Air_Temperature", "TB600_Air_Relative_Humidity",
   "EE894_CO2_Average", "EE894_CO2_Raw", "EE894_Air_Temperature", "EE894_Air_Pressure"
 )
 
@@ -83,11 +83,9 @@ aggregate_period <- function(data, period_name) {
 }
 
 hourly <- aggregate_period(clean_data, "hour")
-daily <- aggregate_period(clean_data, "day")
 
 write_csv(clean_data, file.path(clean_dir, "otice_v5_lora_rowwise_clean.csv"), na = "")
 write_csv(hourly, file.path(clean_dir, "otice_v5_lora_hourly.csv"), na = "")
-write_csv(daily, file.path(clean_dir, "otice_v5_lora_daily.csv"), na = "")
 
 # Match each analyser's hourly raw CO2 mean to analyser 47 before calculating RPE.
 reference_hourly <- hourly %>%
@@ -131,50 +129,29 @@ stats <- clean_data %>%
 write_csv(stats, file.path(table_dir, "otice_v5_lora_co2_raw_statistics.csv"), na = "")
 write_csv(rpe_hourly, file.path(table_dir, "otice_v5_lora_hourly_relative_percentage_error.csv"), na = "")
 
-plot_stats <- stats %>%
-  filter(n > 0) %>%
-  mutate(analyser = factor(analyser, levels = analyser_levels))
-
-p_overall <- ggplot(plot_stats, aes(analyser, mean, colour = analyser)) +
-  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.18, linewidth = 0.7) +
-  geom_point(size = 3) +
-  labs(
-    title = "Raw CO2 by OTICE_v5_LoRA analyser",
-    subtitle = "Points are means; error bars are +/- 1 SD (2026-07-05 to 2026-08-03 UTC)",
-    x = "Analyser", y = expression("EE894 raw " * CO[2] * " (ppm)"), colour = "Analyser"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none", plot.title.position = "plot")
-
-ggsave(file.path(plot_dir, "otice_v5_lora_co2_raw_mean_sd.png"), p_overall,
-       width = 9, height = 5.5, dpi = 300, bg = "white")
-
-plot_aggregated <- function(data, label, filename) {
-  plot_data <- data %>% mutate(analyser = factor(analyser, levels = analyser_levels))
-  ribbon_data <- plot_data %>%
-    filter(!is.na(EE894_CO2_Raw_mean), !is.na(EE894_CO2_Raw_sd))
-  p <- ggplot(plot_data, aes(Date.Time, EE894_CO2_Raw_mean, colour = analyser, group = analyser)) +
-    geom_line(linewidth = 0.45, alpha = 0.9) +
-    geom_ribbon(
-      data = ribbon_data,
-      aes(ymin = EE894_CO2_Raw_mean - EE894_CO2_Raw_sd,
-          ymax = EE894_CO2_Raw_mean + EE894_CO2_Raw_sd,
-          fill = analyser),
-      alpha = 0.08, colour = NA
-    ) +
+plot_raw_series <- function(data, value_column, title, y_label, filename) {
+  plot_data <- data %>%
+    filter(is.finite(.data[[value_column]])) %>%
+    mutate(analyser = factor(analyser, levels = analyser_levels))
+  p <- ggplot(plot_data, aes(Date.Time, .data[[value_column]], colour = analyser, group = analyser)) +
+    geom_line(linewidth = 0.3, alpha = 0.65) +
     labs(
-      title = paste(label, "mean raw CO2 by analyser"),
-      subtitle = "Lines are period means; ribbons are +/- 1 SD",
-      x = "Date/time (UTC)", y = expression("EE894 raw " * CO[2] * " (ppm)"),
-      colour = "Analyser", fill = "Analyser"
+      title = title, subtitle = "Unaggregated cleaned observations",
+      x = "Date/time (UTC)", y = y_label, colour = "Analyser"
     ) +
     theme_minimal(base_size = 11) +
     theme(legend.position = "bottom", plot.title.position = "plot")
   ggsave(file.path(plot_dir, filename), p, width = 12, height = 6.5, dpi = 300, bg = "white")
 }
 
-plot_aggregated(hourly, "Hourly", "otice_v5_lora_co2_raw_hourly_mean_sd.png")
-plot_aggregated(daily, "Daily (24-hour)", "otice_v5_lora_co2_raw_daily_mean_sd.png")
+plot_raw_series(
+  clean_data, "EE894_CO2_Raw", "Raw CO2 time series by analyser",
+  expression("EE894 raw " * CO[2] * " (ppm)"), "otice_v5_lora_co2_raw_timeseries.png"
+)
+plot_raw_series(
+  clean_data, "NH3", "NH3 time series by analyser",
+  expression(NH[3]), "otice_v5_lora_nh3_raw_timeseries.png"
+)
 
 # Smooth hourly period means and SDs independently so the ribbon remains a
 # descriptive mean +/- 1 SD band (rather than a model confidence interval).
@@ -228,7 +205,7 @@ plot_smoothed_hourly <- function(data, title, y_label, filename) {
 }
 
 co2_smoothed <- smooth_hourly_series(hourly, "EE894_CO2_Raw_mean", "EE894_CO2_Raw_sd")
-nh3_smoothed <- smooth_hourly_series(hourly, "TB600_NH3_mean", "TB600_NH3_sd")
+nh3_smoothed <- smooth_hourly_series(hourly, "NH3_mean", "NH3_sd")
 
 plot_smoothed_hourly(
   co2_smoothed,
@@ -239,7 +216,7 @@ plot_smoothed_hourly(
 plot_smoothed_hourly(
   nh3_smoothed,
   "Smoothed hourly NH3 time series by analyser",
-  expression("TB600 " * NH[3]),
+  expression(NH[3]),
   "otice_v5_lora_nh3_hourly_smoothed_mean_sd.png"
 )
 
