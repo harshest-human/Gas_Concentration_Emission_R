@@ -176,5 +176,72 @@ plot_aggregated <- function(data, label, filename) {
 plot_aggregated(hourly, "Hourly", "otice_v5_lora_co2_raw_hourly_mean_sd.png")
 plot_aggregated(daily, "Daily (24-hour)", "otice_v5_lora_co2_raw_daily_mean_sd.png")
 
+# Smooth hourly period means and SDs independently so the ribbon remains a
+# descriptive mean +/- 1 SD band (rather than a model confidence interval).
+smooth_hourly_series <- function(data, mean_column, sd_column, span = 0.45) {
+  data %>%
+    select(Date.Time, analyser, mean = all_of(mean_column), sd = all_of(sd_column)) %>%
+    filter(is.finite(mean)) %>%
+    group_by(analyser) %>%
+    group_modify(~ {
+      series <- arrange(.x, Date.Time)
+      x <- as.numeric(difftime(series$Date.Time, min(series$Date.Time), units = "hours"))
+      if (length(unique(x)) < 4) {
+        return(mutate(series, smooth_mean = mean, smooth_sd = sd))
+      }
+      mean_fit <- loess(mean ~ x, data = series, span = span, degree = 1,
+                        control = loess.control(surface = "direct"))
+      smooth_mean <- as.numeric(predict(mean_fit, newdata = data.frame(x = x)))
+      valid_sd <- is.finite(series$sd)
+      if (sum(valid_sd) >= 4) {
+        sd_series <- series[valid_sd, ]
+        sd_series$x_sd <- x[valid_sd]
+        sd_fit <- loess(sd ~ x_sd, data = sd_series, span = span, degree = 1,
+                        control = loess.control(surface = "direct"))
+        smooth_sd <- as.numeric(predict(sd_fit, newdata = data.frame(x_sd = x)))
+      } else {
+        smooth_sd <- series$sd
+      }
+      mutate(series, smooth_mean = smooth_mean, smooth_sd = pmax(smooth_sd, 0))
+    }) %>%
+    ungroup() %>%
+    mutate(analyser = factor(analyser, levels = analyser_levels))
+}
+
+plot_smoothed_hourly <- function(data, title, y_label, filename) {
+  ribbon_data <- data %>% filter(is.finite(smooth_mean), is.finite(smooth_sd))
+  p <- ggplot(data, aes(Date.Time, smooth_mean, colour = analyser, group = analyser)) +
+    geom_ribbon(
+      data = ribbon_data,
+      aes(ymin = smooth_mean - smooth_sd, ymax = smooth_mean + smooth_sd, fill = analyser),
+      alpha = 0.13, colour = NA
+    ) +
+    geom_line(linewidth = 0.85) +
+    labs(
+      title = title,
+      subtitle = "LOESS-smoothed hourly means; shaded bands are smoothed mean +/- 1 SD",
+      x = "Date/time (UTC)", y = y_label, colour = "Analyser", fill = "Analyser"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "bottom", plot.title.position = "plot")
+  ggsave(file.path(plot_dir, filename), p, width = 12, height = 6.5, dpi = 300, bg = "white")
+}
+
+co2_smoothed <- smooth_hourly_series(hourly, "EE894_CO2_Raw_mean", "EE894_CO2_Raw_sd")
+nh3_smoothed <- smooth_hourly_series(hourly, "TB600_NH3_mean", "TB600_NH3_sd")
+
+plot_smoothed_hourly(
+  co2_smoothed,
+  "Smoothed hourly raw CO2 time series by analyser",
+  expression("EE894 raw " * CO[2] * " (ppm)"),
+  "otice_v5_lora_co2_raw_hourly_smoothed_mean_sd.png"
+)
+plot_smoothed_hourly(
+  nh3_smoothed,
+  "Smoothed hourly NH3 time series by analyser",
+  expression("TB600 " * NH[3]),
+  "otice_v5_lora_nh3_hourly_smoothed_mean_sd.png"
+)
+
 message("Wrote ", format(nrow(clean_data), big.mark = ","), " clean observations.")
 message("Outputs: ", output_root)
