@@ -1,4 +1,4 @@
-##### Manuscript 3 v11: spatiotemporal precision and vertical gradients ####
+##### Manuscript 3 v12: unified analysis and figure pipeline ####
 
 # This script rebuilds the manuscript analysis using internal locations only.
 # Location "s"/52 is retained in immutable source files but is excluded here.
@@ -14,8 +14,8 @@ library(patchwork)
 set.seed(20260807)
 
 workflow <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/mapping_high_resolution"
-out <- file.path(workflow, "clean_data", "manuscript3_spatiotemporal_precision_v11")
-fig <- file.path(workflow, "plots", "manuscript3_spatiotemporal_precision_v11")
+out <- file.path(workflow, "clean_data", "manuscript3_v12", "statistical_tables")
+fig <- file.path(workflow, "plots", "manuscript3_v12", "main")
 man_fig <- file.path(workflow,
   "Manuscript_3_Mapping_high_resolution_concentration_Latex_draft", "figures")
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
@@ -23,7 +23,7 @@ dir.create(fig, recursive = TRUE, showWarnings = FALSE)
 dir.create(man_fig, recursive = TRUE, showWarnings = FALSE)
 
 height_colours <- c(top = "orange", middle = "green3", bottom = "steelblue1")
-response_order <- c("CO2", "CH4", "NH3", "NH3_CO2", "CH4_CO2", "NH3_CH4")
+response_order <- c("CO2", "NH3_CO2", "CH4", "CH4_CO2", "NH3", "NH3_CH4")
 response_labels <- c(
   CO2 = expression(CO[2]), CH4 = expression(CH[4]), NH3 = expression(NH[3]),
   NH3_CO2 = expression(NH[3]/CO[2]), CH4_CO2 = expression(CH[4]/CO[2]),
@@ -113,9 +113,9 @@ x[, `:=`(
     default = "winter"), levels = c("summer", "autumn", "winter")),
   date = as.Date(DATE.TIME, tz = "Europe/Berlin"),
   hour_utc = floor_date(with_tz(DATE.TIME, "UTC"), "hour"),
-  CH4_CO2 = 100 * CH4 / CO2,
-  NH3_CO2 = 100 * NH3 / CO2,
-  NH3_CH4 = 100 * NH3 / CH4
+  CH4_CO2 = CH4 / CO2,
+  NH3_CO2 = NH3 / CO2,
+  NH3_CH4 = NH3 / CH4
 )]
 
 period_levels <- c("C1 summer (Jun-Aug)", "C1 autumn (Oct)",
@@ -151,16 +151,32 @@ fwrite(fig2_summary, file.path(out, "Table_02_campaign1_location_mean_SD_CV.csv"
 
 facet_labeller <- as_labeller(response_labels, default = label_parsed)
 
-p_mean <- ggplot(fig2_summary,
+# Confidence intervals are based on daily location means, rather than treating
+# autocorrelated hourly observations as independent replicates.
+fig2_ci_summary <- c1_hourly[, .(daily_mean = mean(value)),
+  by = .(period, date, response, location_n, horizontal_position, height)
+][, .(
+  n_days = .N,
+  mean = mean(daily_mean),
+  sd_day = sd(daily_mean),
+  se = sd(daily_mean) / sqrt(.N)
+), by = .(response, location_n, horizontal_position, height)]
+fig2_ci_summary[, `:=`(
+  ci_low = mean - qt(0.975, pmax(n_days - 1L, 1L)) * se,
+  ci_high = mean + qt(0.975, pmax(n_days - 1L, 1L)) * se
+)]
+fwrite(fig2_ci_summary, file.path(out, "Table_02b_campaign1_location_mean_95CI.csv"))
+
+p_mean <- ggplot(fig2_ci_summary,
   aes(horizontal_position, mean, colour = height, group = height)) +
   geom_line(linewidth = 0.55) +
-  geom_errorbar(aes(ymin = pmax(0, mean - sd), ymax = mean + sd),
+  geom_errorbar(aes(ymin = pmax(0, ci_low), ymax = ci_high),
                 width = 0.14, linewidth = 0.35, alpha = 0.75) +
   geom_point(size = 1.8) +
   facet_wrap(~response, scales = "free_y", ncol = 3, labeller = facet_labeller) +
   scale_x_continuous(breaks = 1:17, limits = c(0.6, 17.4)) +
   scale_colour_manual(values = height_colours, name = "Height") +
-  labs(x = "Horizontal position", y = "Campaign 1 mean +/- SD") +
+  labs(x = "Horizontal position", y = "Campaign 1 mean (95% CI)") +
   theme_bw(base_size = 10) +
   theme(legend.position = "bottom", panel.grid.minor = element_blank())
 
@@ -232,6 +248,11 @@ entropy4 <- function(v) {
 entropy <- block_long[, .(
   n_blocks = .N, entropy_normalised = entropy4(value)
 ), by = .(response, location_n, horizontal_position, height)]
+entropy[, response := factor(as.character(response), levels = c(
+  "CO2", "NH3_CO2",
+  "CH4", "CH4_CO2",
+  "NH3", "NH3_CH4"
+))]
 entropy[, height_y := c(bottom = 1, middle = 2, top = 3)[as.character(height)]]
 fwrite(entropy, file.path(out, "Table_04_four_bin_Shannon_entropy.csv"))
 
@@ -239,13 +260,14 @@ p_entropy <- ggplot(entropy,
   aes(horizontal_position, height_y, fill = entropy_normalised)) +
   geom_tile(width = 0.94, height = 0.94, colour = "white", linewidth = 0.25) +
   geom_text(aes(label = location_n), size = 2.3) +
-  facet_wrap(~response, ncol = 3, labeller = facet_labeller) +
-  scale_x_continuous(breaks = 1:17, limits = c(0.5, 17.5), expand = c(0, 0)) +
+  facet_wrap(~response, ncol = 2, labeller = facet_labeller) +
+  scale_x_continuous(breaks = NULL, labels = NULL,
+                     limits = c(0.5, 17.5), expand = c(0, 0)) +
   scale_y_continuous(breaks = 1:3, labels = c("bottom", "middle", "top"),
                      limits = c(0.5, 3.5), expand = c(0, 0)) +
   scale_fill_viridis_c(limits = c(0, 1), name = "Normalised\nShannon entropy") +
   coord_fixed(ratio = 1) +
-  labs(x = "Horizontal position", y = "Height") +
+  labs(x = NULL, y = "Height") +
   theme_bw(base_size = 9) +
   theme(panel.grid = element_blank(), legend.position = "bottom")
 
@@ -412,6 +434,288 @@ fwrite(wind_summary, file.path(out, "Table_11_westerly_wind_descriptives.csv"))
 fwrite(wind_tests, file.path(out, "Table_11b_westerly_wind_tests.csv"))
 fwrite(wind_models, file.path(out, "Table_11c_westerly_adjusted_models.csv"))
 
+##### Manuscript v12: network-versus-SP25 statistics and uniform figures ####
+
+v12_out <- file.path(workflow, "clean_data", "manuscript3_v12")
+v12_fig <- file.path(workflow, "plots", "manuscript3_v12")
+dir.create(file.path(v12_out, "statistical_tables"), recursive = TRUE,
+           showWarnings = FALSE)
+dir.create(file.path(v12_out, "audit"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(v12_fig, "main"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(v12_fig, "supplementary"), recursive = TRUE,
+           showWarnings = FALSE)
+
+daily_location <- long[, .(daily_mean = mean(value)),
+  by = .(campaign, date, response, location_n, horizontal_position, height)]
+daily_network <- daily_location[, .(daily_mean = mean(daily_mean)),
+  by = .(campaign, date, response)]
+daily_sp25 <- daily_location[location_n == 25L,
+  .(campaign, date, response, daily_mean)]
+
+describe_vector <- function(v) {
+  v <- v[is.finite(v)]
+  n <- length(v)
+  se <- if (n > 1L) sd(v) / sqrt(n) else NA_real_
+  critical <- if (n > 1L) qt(0.975, n - 1L) else NA_real_
+  list(
+    mean = mean(v), sd = sd(v), cv_pct = 100 * sd(v) / abs(mean(v)),
+    median = median(v), mad = mad(v, constant = 1),
+    minimum = min(v), q1 = quantile(v, 0.25, names = FALSE),
+    q3 = quantile(v, 0.75, names = FALSE), maximum = max(v),
+    ci95_low = mean(v) - critical * se,
+    ci95_high = mean(v) + critical * se,
+    observations = n, measurement_days = uniqueN(v)
+  )
+}
+
+network_stats <- daily_network[, describe_vector(daily_mean),
+  by = .(campaign, response)][, scope := "Whole network"]
+sp25_stats <- daily_sp25[, describe_vector(daily_mean),
+  by = .(campaign, response)][, scope := "SP 25"]
+summary_wide_source <- rbindlist(list(network_stats, sp25_stats), fill = TRUE)
+
+summary_long <- melt(summary_wide_source,
+  id.vars = c("campaign", "response", "scope"),
+  variable.name = "statistic", value.name = "value")
+summary_long[, response := factor(as.character(response), levels = response_order)]
+summary_long[, statistic := factor(statistic, levels = c(
+  "mean", "sd", "cv_pct", "median", "mad", "minimum", "q1", "q3",
+  "maximum", "ci95_low", "ci95_high", "observations", "measurement_days"
+))]
+setorder(summary_long, response, statistic, campaign, scope)
+summary_table <- dcast(summary_long, response + statistic ~ campaign + scope,
+                       value.var = "value")
+fwrite(summary_long, file.path(v12_out, "statistical_tables",
+  "Table_v12_descriptive_statistics_long.csv"))
+fwrite(summary_table, file.path(v12_out, "statistical_tables",
+  "Table_v12_descriptive_statistics_full_page.csv"))
+
+sp25_comparison <- merge(daily_network, daily_sp25,
+  by = c("campaign", "date", "response"), suffixes = c("_network", "_sp25"))
+sp25_comparison[, RE_pct := 100 * (daily_mean_sp25 - daily_mean_network) /
+  daily_mean_network]
+sp25_performance <- sp25_comparison[, .(
+  paired_days = .N,
+  mean_signed_RE_pct = mean(RE_pct),
+  mean_absolute_RE_pct = mean(abs(RE_pct)),
+  RMSE_pct = sqrt(mean(RE_pct^2)),
+  median_RE_pct = median(RE_pct),
+  RE_sd_pct = sd(RE_pct),
+  spearman_rho = cor(daily_mean_sp25, daily_mean_network, method = "spearman")
+), by = .(campaign, response)]
+fwrite(sp25_performance, file.path(v12_out, "statistical_tables",
+  "Table_v12_SP25_network_performance.csv"))
+
+re_table_rows <- rbindlist(list(
+  sp25_performance[, .(campaign, response, scope = "Whole network",
+                       statistic = "SP25_RE_pct", value = 0)],
+  sp25_performance[, .(campaign, response, scope = "SP 25",
+                       statistic = "SP25_RE_pct", value = mean_signed_RE_pct)]
+))
+summary_long <- rbindlist(list(
+  as.data.table(summary_long)[, statistic := as.character(statistic)],
+  re_table_rows
+), use.names = TRUE, fill = TRUE)
+summary_long[, response := factor(as.character(response), levels = response_order)]
+summary_long[, statistic := factor(as.character(statistic), levels = c(
+  "mean", "sd", "cv_pct", "median", "mad", "minimum", "q1", "q3",
+  "maximum", "ci95_low", "ci95_high", "observations", "measurement_days",
+  "SP25_RE_pct"
+))]
+setorder(summary_long, response, statistic, campaign, scope)
+summary_table <- dcast(summary_long, response + statistic ~ campaign + scope,
+                       value.var = "value")
+fwrite(summary_long, file.path(v12_out, "statistical_tables",
+  "Table_v12_descriptive_statistics_long.csv"))
+fwrite(summary_table, file.path(v12_out, "statistical_tables",
+  "Table_v12_descriptive_statistics_full_page.csv"))
+
+man_table_dir <- file.path(workflow,
+  "Manuscript_3_Mapping_high_resolution_concentration_Latex_draft", "tables")
+dir.create(man_table_dir, recursive = TRUE, showWarnings = FALSE)
+
+metric_labels <- c(
+  mean = "Mean", sd = "SD", cv_pct = "CV (\\%)", median = "Median",
+  mad = "MAD", minimum = "Minimum", q1 = "Q1", q3 = "Q3",
+  maximum = "Maximum", ci95_low = "95\\% CI lower",
+  ci95_high = "95\\% CI upper", observations = "Daily estimates",
+  measurement_days = "Measurement days", SP25_RE_pct = "SP25 RE (\\%)"
+)
+response_tex <- c(
+  CO2 = "$\\mathrm{CO_2}$", NH3_CO2 = "$\\mathrm{NH_3}/\\mathrm{CO_2}$",
+  CH4 = "$\\mathrm{CH_4}$", CH4_CO2 = "$\\mathrm{CH_4}/\\mathrm{CO_2}$",
+  NH3 = "$\\mathrm{NH_3}$", NH3_CH4 = "$\\mathrm{NH_3}/\\mathrm{CH_4}$"
+)
+format_table_value <- function(value, response, statistic) {
+  if (!is.finite(value)) return("--")
+  if (statistic %chin% c("observations", "measurement_days"))
+    return(format(round(value), big.mark = ",", scientific = FALSE))
+  digits <- if (response %chin% c("CO2", "CH4", "NH3")) 2L else 5L
+  if (statistic %chin% c("cv_pct", "SP25_RE_pct")) digits <- 2L
+  formatC(value, digits = digits, format = "f")
+}
+
+table_columns <- c("Campaign 1_Whole network", "Campaign 1_SP 25",
+                   "Campaign 2_Whole network", "Campaign 2_SP 25")
+latex_lines <- c(
+  "\\begin{sidewaystable}[p]", "\\centering", "\\scriptsize",
+  "\\caption{Descriptive statistics for daily whole-network estimates and sampling point (SP) 25. Gas ratios are dimensionless and are not multiplied by 100. Whole-network daily estimates weight each available SP equally. Relative error (RE) is signed for SP 25 against the contemporaneous network mean.}",
+  "\\label{tab:full_descriptive_statistics}",
+  "\\setlength{\\tabcolsep}{3.2pt}"
+)
+for (idx in seq_along(response_order)) {
+  response_name <- response_order[idx]
+  d <- summary_table[as.character(response) == response_name]
+  block <- c(
+    paste0("\\begin{minipage}[t]{0.48\\textwidth}\\centering\\textbf{",
+           response_tex[[response_name]], "}\\par\\vspace{1mm}"),
+    "\\begin{tabular}{lrrrr}", "\\toprule",
+    "Statistic & C1 network & C1 SP25 & C2 network & C2 SP25\\\\", "\\midrule"
+  )
+  for (metric in levels(summary_long$statistic)) {
+    row <- d[as.character(statistic) == metric]
+    values <- if (nrow(row)) vapply(table_columns, function(column_name)
+      format_table_value(row[[column_name]], response_name, metric), character(1))
+      else rep("--", 4)
+    block <- c(block, paste(metric_labels[[metric]], paste(values, collapse = " & "),
+                            sep = " & "), "\\\\")
+  }
+  block <- c(block, "\\bottomrule", "\\end{tabular}", "\\end{minipage}")
+  latex_lines <- c(latex_lines, block,
+    if (idx %% 2L == 1L) "\\hfill" else if (idx < length(response_order)) "\\par\\vspace{2mm}" else "")
+}
+latex_lines <- c(latex_lines, "\\end{sidewaystable}")
+writeLines(latex_lines, file.path(man_table_dir,
+  "Table_v12_full_descriptive_statistics.tex"))
+
+format_p <- function(p) {
+  if (!is.finite(p)) return("--")
+  if (p < 0.001) return("$<0.001$")
+  formatC(p, digits = 3, format = "f")
+}
+extract_p <- function(model_list, response_name, term_name) {
+  a <- model_list[[response_name]]$anova
+  value <- a[term == term_name][["Pr(>F)"]]
+  if (length(value)) value[1] else NA_real_
+}
+model_table_lines <- c(
+  "\\begin{table}[htbp]", "\\centering", "\\small",
+  "\\caption{Omnibus tests from the linear mixed-effects models. The dense model used Campaign 1 and all three heights; the shared model used top and bottom SPs available across the four seasonal periods. Models were fitted to log-transformed responses with horizontal position and date as random intercepts.}",
+  "\\label{tab:mixed_model_tests}",
+  "\\begin{tabular}{lrrrrrr}", "\\toprule",
+  "& \\multicolumn{3}{c}{Campaign 1 dense} & \\multicolumn{3}{c}{Shared top--bottom}\\\\",
+  "\\cmidrule(lr){2-4}\\cmidrule(lr){5-7}",
+  "Response & Height & Period & Height $\\times$ period & Height & Period & Height $\\times$ period\\\\",
+  "\\midrule"
+)
+for (response_name in response_order) {
+  values <- c(
+    extract_p(dense_models, response_name, "height"),
+    extract_p(dense_models, response_name, "period"),
+    extract_p(dense_models, response_name, "height:period"),
+    extract_p(tb_models, response_name, "height"),
+    extract_p(tb_models, response_name, "period"),
+    extract_p(tb_models, response_name, "height:period")
+  )
+  model_table_lines <- c(model_table_lines,
+    paste(response_tex[[response_name]], paste(vapply(values, format_p, character(1)),
+      collapse = " & "), sep = " & "), "\\\\")
+}
+model_table_lines <- c(model_table_lines, "\\bottomrule", "\\end{tabular}",
+                       "\\end{table}")
+writeLines(model_table_lines, file.path(man_table_dir,
+  "Table_v12_mixed_model_omnibus.tex"))
+
+location_stats <- daily_location[, {
+  z <- describe_vector(daily_mean)
+  .(days = z$observations, mean = z$mean, sd = z$sd, cv_pct = z$cv_pct,
+    median = z$median, mad = z$mad, ci95_low = z$ci95_low,
+    ci95_high = z$ci95_high)
+}, by = .(campaign, response, location_n, horizontal_position, height)]
+reference_means <- location_stats[location_n == 25L,
+  .(campaign, response, reference_mean = mean)]
+location_stats <- reference_means[location_stats,
+  on = .(campaign, response)]
+location_stats[, `:=`(
+  RE_pct = 100 * (mean - reference_mean) / reference_mean,
+  absolute_RE_pct = abs(100 * (mean - reference_mean) / reference_mean),
+  relative_MAD_pct = 100 * mad / abs(median),
+  relative_CI_halfwidth_pct = 100 * ((ci95_high - ci95_low) / 2) / abs(mean)
+)]
+fwrite(location_stats, file.path(v12_out, "statistical_tables",
+  "Table_v12_all_locations_statistics_and_SP25_RE.csv"))
+
+response_facet_order <- factor(response_order, levels = response_order)
+location_stats[, response := factor(as.character(response),
+                                     levels = levels(response_facet_order))]
+
+p_ci_campaign <- function(campaign_name) {
+  ggplot(location_stats[campaign == campaign_name],
+    aes(location_n, mean, colour = height)) +
+    geom_errorbar(aes(ymin = ci95_low, ymax = ci95_high),
+                  width = 0.16, linewidth = 0.35) +
+    geom_point(size = 1.65) +
+    facet_wrap(~response, scales = "free_y", ncol = 2,
+               labeller = facet_labeller) +
+    scale_x_continuous(breaks = seq(1, 51, by = 2), limits = c(0.5, 51.5)) +
+    scale_colour_manual(values = height_colours, name = "Height") +
+    labs(x = "Sampling point", y = "Mean (95% CI)", title = campaign_name) +
+    theme_bw(base_size = 9) +
+    theme(legend.position = "bottom", panel.grid.minor = element_blank())
+}
+
+metric_colours <- c("#2166ac", "#1fa187", "#7ad151", "#fdae61", "#b2182b")
+metric_breaks <- c(0, 25, 50, 75, 100)
+p_metric_heatmap <- function(campaign_name, metric, legend_title) {
+  d <- copy(location_stats[campaign == campaign_name])
+  d[, display_value := pmin(pmax(get(metric), 0), 100)]
+  d[, height_y := c(bottom = 1, middle = 2, top = 3)[as.character(height)]]
+  ggplot(d, aes(horizontal_position, height_y, fill = display_value)) +
+    geom_tile(width = 0.94, height = 0.94, colour = "white", linewidth = 0.25) +
+    geom_text(aes(label = location_n), size = 2.25) +
+    facet_wrap(~response, ncol = 2, labeller = facet_labeller) +
+    scale_x_continuous(breaks = NULL, labels = NULL,
+                       limits = c(0.5, 17.5), expand = c(0, 0)) +
+    scale_y_continuous(breaks = 1:3, labels = c("bottom", "middle", "top"),
+                       limits = c(0.5, 3.5), expand = c(0, 0)) +
+    scale_fill_gradientn(colours = metric_colours, limits = c(0, 100),
+                         breaks = metric_breaks, name = legend_title) +
+    coord_fixed(ratio = 1) +
+    labs(x = NULL, y = "Height", title = campaign_name) +
+    theme_bw(base_size = 9) +
+    theme(panel.grid = element_blank(), legend.position = "bottom")
+}
+
+v12_plots <- list(
+  C1_mean_CI = p_ci_campaign("Campaign 1"),
+  C2_mean_CI = p_ci_campaign("Campaign 2"),
+  C1_RE_SP25 = p_metric_heatmap("Campaign 1", "absolute_RE_pct", "Absolute RE (%)"),
+  C2_RE_SP25 = p_metric_heatmap("Campaign 2", "absolute_RE_pct", "Absolute RE (%)"),
+  C1_CV = p_metric_heatmap("Campaign 1", "cv_pct", "CV (%)"),
+  C2_CV = p_metric_heatmap("Campaign 2", "cv_pct", "CV (%)"),
+  C1_MAD = p_metric_heatmap("Campaign 1", "relative_MAD_pct", "Relative MAD (%)"),
+  C2_MAD = p_metric_heatmap("Campaign 2", "relative_MAD_pct", "Relative MAD (%)"),
+  C1_CI = p_metric_heatmap("Campaign 1", "relative_CI_halfwidth_pct", "Relative CI (%)"),
+  C2_CI = p_metric_heatmap("Campaign 2", "relative_CI_halfwidth_pct", "Relative CI (%)")
+)
+
+for (nm in names(v12_plots)) {
+  dimensions <- if (grepl("mean_CI", nm)) c(11.2, 10.2) else c(10.5, 8.4)
+  target <- file.path(v12_fig, "main", paste0("Fig_v12_", nm, ".png"))
+  ggsave(target, v12_plots[[nm]], width = dimensions[1], height = dimensions[2],
+         dpi = 350, bg = "white")
+  file.copy(target, file.path(man_fig, basename(target)), overwrite = TRUE)
+}
+
+fwrite(data.table(
+  item = c("ratios", "reference", "heatmap_scale", "CI_basis"),
+  definition = c(
+    "Dimensionless; not multiplied by 100",
+    "Sampling point 25; central pragmatic candidate",
+    "0-100%; values above 100% clipped only for display",
+    "95% t interval calculated from daily sampling-point means"
+  )), file.path(v12_out, "audit", "analysis_decisions_v12.csv"))
+
 ##### Save figures ####
 
 save_both <- function(filename, plot, width, height) {
@@ -421,23 +725,23 @@ save_both <- function(filename, plot, width, height) {
   }
 }
 
-save_both("Fig2_v11_internal_means_SD", p_mean, 12.2, 7.4)
-save_both("Fig2b_v11_internal_CV", p_cv, 12.2, 7.4)
-save_both("Fig3_v11_single_height_relative_error", p_height, 11.5, 7.1)
-save_both("Fig4_v11_Shannon_entropy_square_tiles", p_entropy, 13.0, 5.6)
+save_both("Fig_v12_dense_means_95CI", p_mean, 12.2, 7.4)
+save_both("Fig_v12_dense_CV", p_cv, 12.2, 7.4)
+save_both("Fig_v12_single_height_relative_error", p_height, 11.5, 7.1)
+save_both("Fig_v12_Shannon_entropy", p_entropy, 10.5, 8.4)
 
-writeLines(capture.output(sessionInfo()), file.path(out, "sessionInfo_v11.txt"))
+writeLines(capture.output(sessionInfo()), file.path(v12_out, "audit", "sessionInfo_v12.txt"))
 writeLines(c(
-  "Manuscript 3 v11 spatiotemporal precision analysis",
+  "Manuscript 3 v12 unified analysis",
   "Internal locations only: numeric locations 1-51; source location s/52 excluded.",
   "Campaign 1 summer: June-August 2024; Campaign 1 autumn: October 2024.",
   "Campaign 2 was split into late autumn (November) and winter (December).",
   "Middle height: 3.6 m above floor; bottom height: 2.6 m above floor.",
   "Top height: 0.60 m below the local roof, not represented by one absolute elevation.",
-  "Ratios in figures and tables are multiplied by 100 and expressed as percentages.",
+  "Gas ratios are dimensionless and are not multiplied by 100.",
   "Westerly DWD sector: 225 <= direction < 315 degrees; regional context only.",
   "DWD wind is not barn-local velocity or turbulence intensity."
-), file.path(out, "analysis_readme_v11.txt"))
+), file.path(v12_out, "audit", "analysis_readme_v12.txt"))
 
 cat("Internal rows:", nrow(x), "\n")
 cat("Complete dense two-hour blocks:", nrow(complete_blocks), "\n")

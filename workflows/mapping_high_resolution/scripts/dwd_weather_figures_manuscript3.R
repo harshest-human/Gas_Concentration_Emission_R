@@ -174,11 +174,19 @@ period_fill <- c(
   "Campaign 2: late autumn/winter" = "#457b9d"
 )
 
+campaign_date_scale <- scale_x_date(
+  limits = as.Date(c("2024-06-01", "2024-12-31")),
+  breaks = seq(as.Date("2024-06-01"), as.Date("2024-12-01"), by = "1 month"),
+  date_labels = "%b-%Y",
+  expand = expansion(mult = c(0.01, 0.01))
+)
+
 p_temp <- ggplot(daily, aes(date, temperature_mean_C,
                             colour = study_period, fill = study_period)) +
   geom_ribbon(aes(ymin = temperature_min_C, ymax = temperature_max_C),
               alpha = 0.16, colour = NA) +
   geom_line(linewidth = 0.55) +
+  campaign_date_scale +
   scale_colour_manual(values = period_fill, guide = "none") +
   scale_fill_manual(values = period_fill, guide = "none") +
   labs(x = NULL, y = "Air temperature (°C)") +
@@ -186,6 +194,7 @@ p_temp <- ggplot(daily, aes(date, temperature_mean_C,
 
 p_rh <- ggplot(daily, aes(date, humidity_mean_pct, colour = study_period)) +
   geom_line(linewidth = 0.55) +
+  campaign_date_scale +
   scale_colour_manual(values = period_fill, guide = "none") +
   coord_cartesian(ylim = c(35, 100)) +
   labs(x = NULL, y = "Relative humidity (%)") +
@@ -193,6 +202,7 @@ p_rh <- ggplot(daily, aes(date, humidity_mean_pct, colour = study_period)) +
 
 p_rain <- ggplot(daily, aes(date, precipitation_sum_mm, fill = study_period)) +
   geom_col(width = 0.85) +
+  campaign_date_scale +
   scale_fill_manual(values = period_fill, name = "Study period") +
   labs(x = "Date in 2024", y = "Precipitation (mm d⁻¹)",
        caption = paste0(
