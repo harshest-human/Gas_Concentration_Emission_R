@@ -1,6 +1,6 @@
 \documentclass[12pt,a4paper]{article}
 \usepackage[margin=2.5cm]{geometry}
-\usepackage{graphicx,booktabs,array,amsmath,siunitx,natbib,caption,subcaption,placeins,setspace,lineno,url}
+\usepackage{graphicx,booktabs,array,amsmath,siunitx,natbib,caption,subcaption,placeins,setspace,lineno,url,rotating}
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{figures/}}
 \sisetup{separate-uncertainty=true,per-mode=symbol,range-phrase={--},range-units=single}
@@ -71,7 +71,7 @@ Hourly temperature, relative humidity, precipitation, wind speed and wind direct
 \subsection{Responses and statistical analysis}
 Ratios were calculated on paired observations as
 \begin{equation}
-R_{a/b}=100\,C_a/C_b .
+R_{a/b}=C_a/C_b .
 \end{equation}
 Spatial precision within each hour, day, ISO week and campaign period was expressed as
 \begin{equation}
@@ -94,14 +94,21 @@ The analysis included 159,866 internal records: 108,078 in summer Campaign~1, 31
 Mean concentrations also changed over time. Across heights, \(\mathrm{CO_2}\) and \(\mathrm{CH_4}\) were generally higher in autumn and winter than in summer, while \(\mathrm{NH_3}\) declined from approximately \SI{2.1}{ppm} in summer to below \SI{1}{ppm} in Campaign~2. The ratios did not track concentration changes identically, confirming that temporal variation was not a uniform multiplication of all gases.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{Fig2_v11_internal_means_SD.png}
-\caption{Campaign~1 mean concentrations and ratios at the 17 horizontal positions, shown as mean \(\pm\) SD. The first row contains \(\mathrm{CO_2}\), \(\mathrm{CH_4}\), and \(\mathrm{NH_3}\); the second contains \(\mathrm{NH_3}/\mathrm{CO_2}\), \(\mathrm{CH_4}/\mathrm{CO_2}\), and \(\mathrm{NH_3}/\mathrm{CH_4}\). Colours denote top (orange), middle (green), and bottom (blue).}
+\includegraphics[width=\textwidth]{Fig_v12_C1_mean_CI.png}
+\caption{Campaign~1 mean concentrations and dimensionless ratios with 95\% confidence intervals calculated from daily sampling-point means. All 51 internal SPs are shown. Facets follow the common response order; colours denote top (orange), middle (green), and bottom (blue).}
 \label{fig:means}
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{Fig2b_v11_internal_CV.png}
-\caption{Spatial CV by gas, ratio and Campaign~1 period. The axis is restricted to 0--100\%; triangles at the upper boundary indicate values exceeding that display range. Separating CV from Fig.~\ref{fig:means} prevents variability from obscuring the concentration gradients.}
+\includegraphics[width=\textwidth]{Fig_v12_C2_mean_CI.png}
+\caption{Campaign~2 mean concentrations and dimensionless ratios with 95\% confidence intervals calculated from daily sampling-point means. The reduced network contains top (orange) and bottom (blue) SPs; no middle SPs were sampled.}
+\label{fig:means_c2}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C1_CV.png}\caption{Campaign 1.}\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C2_CV.png}\caption{Campaign 2.}\end{subfigure}
+\caption{Location-specific coefficients of variation calculated from daily means. All panels use the same 0--100\% colour scale; location numbers remain inside the tiles.}
 \label{fig:cv}
 \end{figure}
 
@@ -111,8 +118,9 @@ In dense Campaign~1 data, height, period and their interaction affected every co
 The four-period top--bottom models confirmed significant height-by-period interactions for all responses (\(p<0.001\)). Top concentrations exceeded bottom concentrations significantly in every period except \(\mathrm{CO_2}\) in late autumn. The largest proportional separation occurred for \(\mathrm{NH_3}\), especially in autumn and winter. Ratio gradients were also significant, showing that common ventilation-driven dilution alone could not explain the vertical ordering.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=0.92\textwidth]{Fig3_v11_single_height_relative_error.png}
-\caption{Relative error of top-, middle-, and bottom-only means against the contemporaneous 51-location dense mean in 921 complete Campaign~1 two-hour blocks. Combined height configurations are intentionally omitted so that the consequences of selecting a single sampling height remain visible.}
+\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C1_RE_SP25.png}\caption{Campaign 1.}\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C2_RE_SP25.png}\caption{Campaign 2.}\end{subfigure}
+\caption{Absolute relative error of each location mean against the pragmatic central reference, SP 25. Ratios were calculated without percentage scaling; only their relative errors are percentages. All panels use the same 0--100\% colour scale.}
 \label{fig:re}
 \end{figure}
 
@@ -122,7 +130,7 @@ The middle-only distribution generally lay closer to the dense mean than either 
 Entropy varied by gas and position (Fig.~\ref{fig:entropy}). Locations with high entropy for one gas were not invariably high for another, consistent with gas-specific source and transport behaviour. The result did not identify a universal sensor position and should not be equated with CFD-based optimisation.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{Fig4_v11_Shannon_entropy_square_tiles.png}
+\includegraphics[width=\textwidth]{Fig_v12_Shannon_entropy.png}
 \caption{Four-bin Shannon entropy for each gas and ratio at horizontal positions 1--17 and the three heights during Campaign~1. Equal coordinate scaling produces square tiles. Higher entropy denotes a more even occupancy of the four concentration bins, not lower measurement uncertainty.}
 \label{fig:entropy}
 \end{figure}
@@ -130,11 +138,13 @@ Entropy varied by gas and position (Fig.~\ref{fig:entropy}). Locations with high
 Seasonal wind roses and temperature--humidity records showed that the campaigns sampled different external regimes (Fig.~\ref{fig:weather}). Westerly hours were associated with lower, rather than higher, internal hourly mean concentrations in the unadjusted summaries: for example, autumn Campaign~1 means changed from 671 to \SI{601}{ppm} \(\mathrm{CO_2}\), 21.3 to \SI{17.2}{ppm} \(\mathrm{CH_4}\), and 1.76 to \SI{1.37}{ppm} \(\mathrm{NH_3}\). Winter differences were also negative. These associations are consistent with enhanced ventilation under some westerly regimes, but regional wind cannot distinguish dilution from plume transport or opening-specific flow.
 
 \begin{figure}[htbp]\centering
-\begin{subfigure}[t]{0.98\textwidth}\includegraphics[width=\linewidth]{Fig_DWD_seasonal_wind_roses.png}\caption{Wind direction and speed.}\end{subfigure}
-\begin{subfigure}[t]{0.98\textwidth}\includegraphics[width=\linewidth]{Fig_DWD_temperature_humidity_precipitation.png}\caption{Temperature, relative humidity and precipitation.}\end{subfigure}
-\caption{Meteorological context from the German Meteorological Service. These regional measurements describe seasonal forcing and were not treated as direct measurements of airflow through the barn.}
+\includegraphics[width=\textwidth]{Fig_DWD_seasonal_wind_roses.png}
+\caption{Seasonal wind direction and speed from the German Meteorological Service. These regional measurements describe seasonal forcing and were not treated as direct measurements of airflow through the barn.}
 \label{fig:weather}
 \end{figure}
+
+\input{tables/Table_v12_full_descriptive_statistics.tex}
+\input{tables/Table_v12_mixed_model_omnibus.tex}
 
 \section{Discussion}
 \subsection{Precision is a property of gas, space and time}
@@ -169,6 +179,14 @@ The authors thank the staff of the experimental dairy facility for operational s
 
 \section*{Data and code availability}
 The reproducible R workflow used for the reported analysis is version controlled with the manuscript. Raw instrument data are retained by the authors and can be made available subject to institutional data-management requirements.
+
+\appendix
+\section{Supplementary meteorological context}
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{Fig_DWD_temperature_humidity_precipitation.png}
+\caption{Daily air temperature, relative humidity and precipitation from the DWD Potsdam station. Monthly ticks run from June to December 2024. Missing intervals between campaigns are retained.}
+\label{fig:weather_annex}
+\end{figure}
 
 \bibliographystyle{elsarticle-harv}
 \bibliography{references}
