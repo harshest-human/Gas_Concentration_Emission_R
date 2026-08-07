@@ -497,12 +497,19 @@ sp25_comparison[, RE_pct := 100 * (daily_mean_sp25 - daily_mean_network) /
 sp25_performance <- sp25_comparison[, .(
   paired_days = .N,
   mean_signed_RE_pct = mean(RE_pct),
+  RE_se_pct = sd(RE_pct) / sqrt(.N),
+  equivalence_90CI_low_pct = mean(RE_pct) - qt(0.95, .N - 1L) * sd(RE_pct) / sqrt(.N),
+  equivalence_90CI_high_pct = mean(RE_pct) + qt(0.95, .N - 1L) * sd(RE_pct) / sqrt(.N),
   mean_absolute_RE_pct = mean(abs(RE_pct)),
   RMSE_pct = sqrt(mean(RE_pct^2)),
   median_RE_pct = median(RE_pct),
   RE_sd_pct = sd(RE_pct),
+  days_within_5pct = 100 * mean(abs(RE_pct) <= 5),
+  days_within_10pct = 100 * mean(abs(RE_pct) <= 10),
   spearman_rho = cor(daily_mean_sp25, daily_mean_network, method = "spearman")
 ), by = .(campaign, response)]
+sp25_performance[, equivalent_within_5pct :=
+  equivalence_90CI_low_pct > -5 & equivalence_90CI_high_pct < 5]
 fwrite(sp25_performance, file.path(v12_out, "statistical_tables",
   "Table_v12_SP25_network_performance.csv"))
 
@@ -625,6 +632,35 @@ model_table_lines <- c(model_table_lines, "\\bottomrule", "\\end{tabular}",
                        "\\end{table}")
 writeLines(model_table_lines, file.path(man_table_dir,
   "Table_v12_mixed_model_omnibus.tex"))
+
+sp25_table_lines <- c(
+  "\\begin{table}[htbp]", "\\centering", "\\scriptsize",
+  "\\caption{Performance and equivalence of SP25 against the equally weighted daily whole-network mean. Equivalence required the 90\\% confidence interval (CI) for signed relative error (RE) to lie entirely within $-5$ to $+5$\\%.}",
+  "\\label{tab:sp25_equivalence}",
+  "\\begin{tabular}{llrrrrrr}", "\\toprule",
+  "Campaign & Response & Signed RE & 90\\% CI & MAE & RMSE & $\\rho$ & Equivalent\\\\",
+  "& & (\\%) & (\\%) & (\\%) & (\\%) & & $\\pm5$\\%\\\\", "\\midrule"
+)
+for (campaign_name in c("Campaign 1", "Campaign 2")) {
+  for (response_name in response_order) {
+    row <- sp25_performance[campaign == campaign_name &
+                              as.character(response) == response_name]
+    if (!nrow(row)) next
+    ci_text <- sprintf("%.2f to %.2f", row$equivalence_90CI_low_pct,
+                       row$equivalence_90CI_high_pct)
+    sp25_table_lines <- c(sp25_table_lines, paste(
+      campaign_name, response_tex[[response_name]],
+      sprintf("%.2f", row$mean_signed_RE_pct), ci_text,
+      sprintf("%.2f", row$mean_absolute_RE_pct), sprintf("%.2f", row$RMSE_pct),
+      sprintf("%.3f", row$spearman_rho),
+      ifelse(row$equivalent_within_5pct, "Yes", "No"), sep = " & "), "\\\\")
+  }
+  if (campaign_name == "Campaign 1") sp25_table_lines <- c(sp25_table_lines, "\\midrule")
+}
+sp25_table_lines <- c(sp25_table_lines, "\\bottomrule", "\\end{tabular}",
+                      "\\end{table}")
+writeLines(sp25_table_lines, file.path(man_table_dir,
+  "Table_v12_SP25_equivalence.tex"))
 
 location_stats <- daily_location[, {
   z <- describe_vector(daily_mean)

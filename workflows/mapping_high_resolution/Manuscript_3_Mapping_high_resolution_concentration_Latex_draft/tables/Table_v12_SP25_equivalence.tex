@@ -1,0 +1,38 @@
+\begin{table}[htbp]
+\centering
+\scriptsize
+\caption{Performance and equivalence of SP25 against the equally weighted daily whole-network mean. Equivalence required the 90\% confidence interval (CI) for signed relative error (RE) to lie entirely within $-5$ to $+5$\%.}
+\label{tab:sp25_equivalence}
+\begin{tabular}{llrrrrrr}
+\toprule
+Campaign & Response & Signed RE & 90\% CI & MAE & RMSE & $\rho$ & Equivalent\\
+& & (\%) & (\%) & (\%) & (\%) & & $\pm5$\%\\
+\midrule
+Campaign 1 & $\mathrm{CO_2}$ & -0.56 & -0.97 to -0.14 & 2.16 & 2.70 & 0.959 & Yes
+\\
+Campaign 1 & $\mathrm{NH_3}/\mathrm{CO_2}$ & 0.98 & -1.28 to 3.24 & 8.84 & 14.52 & 0.876 & Yes
+\\
+Campaign 1 & $\mathrm{CH_4}$ & 4.09 & 3.08 to 5.09 & 6.02 & 7.63 & 0.945 & No
+\\
+Campaign 1 & $\mathrm{CH_4}/\mathrm{CO_2}$ & 4.13 & 2.97 to 5.29 & 5.83 & 8.50 & 0.891 & No
+\\
+Campaign 1 & $\mathrm{NH_3}$ & 1.02 & -0.42 to 2.46 & 7.68 & 9.29 & 0.880 & Yes
+\\
+Campaign 1 & $\mathrm{NH_3}/\mathrm{CH_4}$ & -3.39 & -5.45 to -1.32 & 9.55 & 13.64 & 0.849 & No
+\\
+\midrule
+Campaign 2 & $\mathrm{CO_2}$ & 0.74 & 0.14 to 1.33 & 1.99 & 2.47 & 0.987 & Yes
+\\
+Campaign 2 & $\mathrm{NH_3}/\mathrm{CO_2}$ & 6.86 & 4.39 to 9.33 & 10.18 & 12.02 & 0.826 & No
+\\
+Campaign 2 & $\mathrm{CH_4}$ & 1.55 & -0.44 to 3.55 & 6.63 & 8.12 & 0.983 & Yes
+\\
+Campaign 2 & $\mathrm{CH_4}/\mathrm{CO_2}$ & 1.25 & -0.18 to 2.68 & 4.83 & 5.84 & 0.987 & Yes
+\\
+Campaign 2 & $\mathrm{NH_3}$ & 7.28 & 4.64 to 9.92 & 10.43 & 12.80 & 0.886 & No
+\\
+Campaign 2 & $\mathrm{NH_3}/\mathrm{CH_4}$ & 4.61 & 1.79 to 7.43 & 9.53 & 12.18 & 0.956 & No
+\\
+\bottomrule
+\end{tabular}
+\end{table}

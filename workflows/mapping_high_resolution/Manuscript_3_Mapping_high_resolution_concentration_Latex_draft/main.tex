@@ -44,9 +44,9 @@ Vertical gradients are gas- and site-specific. \citet{Sahu2023} measured signifi
 
 Temporal aggregation is equally important. Rapid changes in wind and thermal forcing may create large short-term spatial differences that are attenuated in daily or campaign means. Wind direction can also change which openings are inlets or outlets and which indoor locations are representative \citep{Saha2013,Koenig2018,JankeSampling2020}. Regional meteorological observations describe the synoptic forcing but do not replace velocity measurements at the barn openings. Consequently, seasonal comparisons should quantify temporal evolution while avoiding causal claims that cannot be resolved without co-located airflow measurements.
 
-Gas ratios provide a complementary diagnostic. If all gases respond identically to dilution, their ratios should be spatially more stable than their concentrations. Persistent gradients in \(\mathrm{NH_3}/\mathrm{CO_2}\), \(\mathrm{CH_4}/\mathrm{CO_2}\), or \(\mathrm{NH_3}/\mathrm{CH_4}\) instead indicate differences in sources, sinks or transport. Information-based measures can additionally identify redundant locations, although the entropy optimisation of \citet{Chen2026} was developed for CFD-derived ventilation fields and must be interpreted here as an empirical adaptation rather than a direct replication.
+Gas ratios provide a complementary diagnostic. If all gases respond identically to dilution, their ratios should be spatially more stable than their concentrations. Persistent gradients in \(\mathrm{NH_3}/\mathrm{CO_2}\), \(\mathrm{CH_4}/\mathrm{CO_2}\), or \(\mathrm{NH_3}/\mathrm{CH_4}\) instead indicate differences in sources, sinks or transport. \citet{Chen2026} used entropy to describe the sensitivity of CFD airflow fields to prescribed wind cases. Here, entropy instead describes temporal state occupancy in sequential field concentrations and is interpreted as a complementary, gas-specific measure of location informativeness.
 
-Two hypotheses were tested: (H1) the precision of each gas differs at different spatial and temporal resolutions; and (H2) gas concentrations generally increase with increasing vertical sampling height, as suggested by previous measurements \citep{Sahu2023}. The objectives were to quantify concentration and ratio heterogeneity from hourly to campaign scales, determine whether the vertical pattern persisted from summer through winter, and evaluate omission of the middle layer as a practical consequence of the observed structure.
+Three hypotheses were tested: (H1) the precision of each gas differs at different spatial and temporal resolutions; (H2) gas concentrations generally increase with increasing vertical sampling height, as suggested by previous measurements \citep{Sahu2023}; and (H3) the centrally located SP25 is equivalent to the daily whole-network mean within a prespecified \(\pm5\%\) relative-error margin. The objectives were to quantify concentration and ratio heterogeneity, test the persistence of vertical structure, evaluate SP25 as a pragmatic reference, and assess omission of the middle layer as a practical consequence of the observed structure.
 
 \section{Materials and methods}
 \subsection{Barn and sampling layout}
@@ -87,6 +87,8 @@ For complete two-hour dense-network blocks, each single-height mean was compared
 \end{equation}
 Shannon entropy was calculated after discretising each response into four equiprobable bins within period. The resulting tiles assess empirical compositional information at a location; they are not estimates of airflow or local mean age of air. Analyses were conducted in R 4.5.3. Significance was assessed at \(\alpha=0.05\), with effect sizes and temporal consistency interpreted alongside \(p\)-values.
 
+SP25 was compared with the equally weighted daily whole-network mean using signed RE, mean absolute error, RMSE and Spearman correlation. Equivalence was assessed using the two one-sided-test principle: the 90\% confidence interval for mean daily RE had to lie completely within \(-5\%\) to \(+5\%\). This margin was specified before interpretation and was applied identically to concentrations and ratios.
+
 \section{Results}
 \subsection{Gas-specific precision across temporal resolutions}
 The analysis included 159,866 internal records: 108,078 in summer Campaign~1, 31,156 in autumn Campaign~1, 8,906 in late-autumn Campaign~2 and 11,726 in winter Campaign~2. Precision differed by response, temporal scale and their interaction (all \(p<0.001\)). At hourly resolution, median spatial CV was 7.5--8.9\% for \(\mathrm{CO_2}\), 22.0--27.2\% for \(\mathrm{CH_4}\), and 24.3--33.2\% for \(\mathrm{NH_3}\). Daily medians decreased to 4.4--6.1\%, 9.5--17.1\%, and 19.9--29.3\%, respectively. Weekly values were similar to or below daily values for \(\mathrm{CO_2}\) and \(\mathrm{CH_4}\), whereas \(\mathrm{NH_3}\) remained comparatively heterogeneous. H1 was therefore supported: both gas identity and aggregation scale altered apparent precision.
@@ -106,8 +108,8 @@ Mean concentrations also changed over time. Across heights, \(\mathrm{CO_2}\) an
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C1_CV.png}\caption{Campaign 1.}\end{subfigure}
-\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C2_CV.png}\caption{Campaign 2.}\end{subfigure}
+\begin{subfigure}[t]{0.78\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C1_CV.png}\caption{Campaign 1.}\end{subfigure}\par
+\begin{subfigure}[t]{0.78\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C2_CV.png}\caption{Campaign 2.}\end{subfigure}
 \caption{Location-specific coefficients of variation calculated from daily means. All panels use the same 0--100\% colour scale; location numbers remain inside the tiles.}
 \label{fig:cv}
 \end{figure}
@@ -118,13 +120,18 @@ In dense Campaign~1 data, height, period and their interaction affected every co
 The four-period top--bottom models confirmed significant height-by-period interactions for all responses (\(p<0.001\)). Top concentrations exceeded bottom concentrations significantly in every period except \(\mathrm{CO_2}\) in late autumn. The largest proportional separation occurred for \(\mathrm{NH_3}\), especially in autumn and winter. Ratio gradients were also significant, showing that common ventilation-driven dilution alone could not explain the vertical ordering.
 
 \begin{figure}[htbp]\centering
-\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C1_RE_SP25.png}\caption{Campaign 1.}\end{subfigure}
-\begin{subfigure}[t]{0.49\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C2_RE_SP25.png}\caption{Campaign 2.}\end{subfigure}
+\begin{subfigure}[t]{0.78\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C1_RE_SP25.png}\caption{Campaign 1.}\end{subfigure}\par
+\begin{subfigure}[t]{0.78\textwidth}\includegraphics[width=\linewidth]{Fig_v12_C2_RE_SP25.png}\caption{Campaign 2.}\end{subfigure}
 \caption{Absolute relative error of each location mean against the pragmatic central reference, SP 25. Ratios were calculated without percentage scaling; only their relative errors are percentages. All panels use the same 0--100\% colour scale.}
 \label{fig:re}
 \end{figure}
 
 The middle-only distribution generally lay closer to the dense mean than either extreme, as expected for an intermediate layer. Its practical incremental value was nevertheless limited during summer because it was only \SI{1}{m} above the bottom layer and frequently indistinguishable from either bottom or top for particular gases. This empirical redundancy motivated its omission in Campaign~2; it does not imply that the barn was homogeneously mixed.
+
+\subsection{Representativeness of the central SP25}
+SP25 reproduced daily whole-network \(\mathrm{CO_2}\) particularly well: mean absolute RE was 2.16\% in Campaign~1 and 1.99\% in Campaign~2, RMSE was 2.70\% and 2.47\%, and Spearman correlation was 0.959 and 0.987, respectively. Performance was weaker for \(\mathrm{CH_4}\) (mean absolute RE 6.02--6.63\%) and \(\mathrm{NH_3}\) (7.68--10.43\%). Ratio performance was also response-dependent; Campaign~2 \(\mathrm{NH_3}/\mathrm{CO_2}\) had 6.86\% signed bias and 10.18\% mean absolute RE. Consequently, H3 was supported for \(\mathrm{CO_2}\) but not as a universal statement across gases and ratios. Central position alone was insufficient to establish a generally representative sampling point.
+
+\input{tables/Table_v12_SP25_equivalence.tex}
 
 \subsection{Entropy and meteorological context}
 Entropy varied by gas and position (Fig.~\ref{fig:entropy}). Locations with high entropy for one gas were not invariably high for another, consistent with gas-specific source and transport behaviour. The result did not identify a universal sensor position and should not be equated with CFD-based optimisation.
@@ -162,7 +169,7 @@ Ratio gradients reinforce this interpretation. If vertical differences reflected
 \subsection{Wind, neighbouring sources and sensor placement}
 Westerly periods did not produce a general concentration rise in these data. Their lower internal means suggest that ventilation enhancement dominated during the observed hours, although this inference remains provisional. A neighbouring naturally ventilated dairy barn could contribute intermittent plumes when upwind, but regional meteorology and internal concentration alone cannot identify that source. A future study should measure approach flow and gas concentrations between the two barns and explicitly test how inter-barn distance, atmospheric stability and plume meandering affect inlet concentrations.
 
-The empirical entropy maps showed that information content was response-specific. This is compatible with the central idea of \citet{Chen2026}, namely that sensor utility depends on the ventilation scenario, but the two entropy quantities are not interchangeable. Chen's method uses CFD-informed fields and an optimisation objective; the present discretised entropy describes observed concentration occupancy under sequential sampling. A defensible sensor network should combine empirical concentration heterogeneity with concurrent velocity sensing, then test candidate configurations by CFD or wind-tunnel simulation.
+Entropy was response- and height-specific. In \citet{Chen2026}, it quantified the sensitivity of simulated airflow variables to prescribed wind cases; here, it quantified temporal occupancy of measured concentration states shaped by sources and ventilation. The values are therefore conceptually related but not directly transferable, and high entropy alone does not identify a universally representative SP.
 
 \subsection{Limitations and future work}
 Sequential sampling trades spatial coverage against simultaneity. Although two-hour complete blocks and mixed models reduced this confounding, rapidly changing flow can evolve within a switching cycle. Campaign and season were also partly aliased with network reduction and analyser deployment. DWD measurements were not co-located at the openings. Finally, retaining every positive concentration avoids an arbitrary physical threshold but makes ratio moments sensitive to small denominators; robust block-level summaries are therefore essential.
