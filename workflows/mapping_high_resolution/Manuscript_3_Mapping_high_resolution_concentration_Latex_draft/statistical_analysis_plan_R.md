@@ -18,19 +18,19 @@ experiment.
 
 ## 2. Input data
 
-Primary analytical dataset:
+Primary accepted inputs:
 
 ```text
 D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
-mapping_high_resolution/clean_data/manuscript1/
-manuscript1_campaign1_2_analytical_data.csv
+mapping_high_resolution/clean_data/1_campaign/
+mapping_high_resolution/clean_data/2_campaign/
 ```
 
-Existing reproducible preparation script:
+Canonical reproducible analysis script:
 
 ```text
 D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
-mapping_high_resolution/scripts/manuscript1_campaign1_2_analysis.R
+mapping_high_resolution/scripts/manuscript3_pipeline_v12.R
 ```
 
 Required variables:
@@ -40,17 +40,18 @@ Required variables:
 - `analyser`
 - `location`
 - `horizontal_position`
-- `vgroup`
+- `height`
 - `CO2`
 - `CH4`
 - `NH3`
 - Campaign 1 corrected concentrations
-- `CH4_CO2_pct`
-- `NH3_CO2_pct`
-- `NH3_CH4_pct`, to be calculated when the denominator is positive
+- `CH4_CO2`
+- `NH3_CO2`
+- `NH3_CH4`, calculated only when the denominator is positive
 
-The south-background location `s` will be retained in the analytical data but
-excluded from internal spatial models.
+Only internal numeric locations 1--51 are included in Manuscript 3 spatial
+models. Reference or background labels retained in immutable source files are
+excluded by the canonical analysis pipeline.
 
 
 ## 3. Software and R packages

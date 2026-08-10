@@ -41,3 +41,10 @@ clean-output directories, four superseded plot directories, and 17 obsolete
 manuscript figure copies were moved to the Windows Recycle Bin. They remain
 recoverable until the Recycle Bin is emptied. The two canonical scripts and
 all upstream cleaning dependencies were retained.
+
+A second cleanup on 2026-08-10 moved two broken legacy R scripts, the copied
+TeX-version directory, superseded `manuscript1` outputs, LaTeX build
+intermediates, and unused manuscript-figure copies to the Windows Recycle Bin.
+The canonical scripts, accepted campaign inputs, current v12 outputs,
+`main.tex`, `main.pdf`, and all figures referenced by `main.tex` were verified
+afterwards.

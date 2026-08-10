@@ -1,6 +1,6 @@
 # Paper 3: Mapping gas concentrations
 
-This folder contains the LaTeX draft for Manuscript 1 on Campaigns 1 and 2.
+This folder contains the LaTeX draft for Manuscript 3 on Campaigns 1 and 2.
 
 ## Build
 
@@ -16,26 +16,36 @@ pdflatex main
 
 ## Reproducible analysis
 
-The data-processing and plotting script is:
+The unified concentration-analysis, statistics, table, and plotting script is:
 
 ```text
 D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
-mapping_high_resolution/scripts/manuscript1_campaign1_2_analysis.R
+mapping_high_resolution/scripts/manuscript3_pipeline_v12.R
+```
+
+The separate DWD preparation and meteorological-figure script is:
+
+```text
+D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
+mapping_high_resolution/scripts/dwd_weather_figures_manuscript3.R
 ```
 
 Clean manuscript data and tables are written to:
 
 ```text
 D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
-mapping_high_resolution/clean_data/manuscript1
+mapping_high_resolution/clean_data/manuscript3_v12
 ```
 
 Plots are written to:
 
 ```text
 D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
-mapping_high_resolution/plots/manuscript1
+mapping_high_resolution/plots/manuscript3_v12
 ```
+
+`main.tex` is the single canonical manuscript source. Git commits and tags,
+rather than copied TeX files, provide version history.
 
 ## Items requiring author confirmation
 
