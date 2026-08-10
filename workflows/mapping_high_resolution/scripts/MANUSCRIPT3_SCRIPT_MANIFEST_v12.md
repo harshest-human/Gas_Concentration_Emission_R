@@ -1,9 +1,16 @@
 # Manuscript 3 analysis-script manifest (v12)
 
-## Canonical script
+## Canonical scripts
 
 - `manuscript3_pipeline_v12.R`: the single executable pipeline for Campaigns 1 and 2, ratios, descriptive statistics, SP25 comparisons, multiscale precision, mixed-effects models, Shannon entropy, meteorological associations, tables, and figures.
 - `dwd_weather_figures_manuscript3.R`: retained as the second canonical script because it creates the DWD weather input and the two meteorological figures used by the manuscript.
+
+All manuscript concentration outputs---including time series, relative error
+(RE), coefficient of variation (CV), confidence intervals, median absolute
+deviation, entropy, statistical models, summary tables, and manuscript
+figures---must be produced through `manuscript3_pipeline_v12.R`. New analyses
+should be added as functions or clearly labelled sections in this script, not
+as additional manuscript-analysis scripts.
 
 ## Supporting upstream scripts retained
 
@@ -16,21 +23,21 @@ These create accepted clean inputs and remain outside the manuscript-analysis co
 - `recover_campaign1_crds_june_august.R`
 - `combine_campaign2_CRDS.R`
 
-## Redundant manuscript-analysis candidates for archival
+## Version-control policy
 
-The following overlap with the canonical v12 pipeline. They must not be deleted until the v12 numerical audit is approved:
-
-- `manuscript1_campaign1_2_analysis.R`
-- `manuscript3_campaign1_june_august_analysis_v03.R`
-- `manuscript3_campaign1_recovered_analysis.R`
-- `manuscript3_external_wind_background_analysis.R`
-- `manuscript3_multiscale_reference_analysis_v04.R`
-- `manuscript3_spatiotemporal_statistics.R`
-
-## Archival rule
-
-After approval, redundant scripts should be moved together to `scripts/archive/manuscript3_pre_v12/`. Git history, rather than additional filename suffixes, will track subsequent corrections. A new versioned output directory should be created only when a scientific analysis is frozen.
+- `main.tex` is the single canonical manuscript source. Scientific and
+  editorial changes are tracked with Git commits instead of copied TeX files.
+- The two canonical R scripts above are edited in place and tracked with Git.
+- Generated tables, clean derivatives, and figures are reproducible outputs;
+  they must not be edited manually.
+- A Git tag may mark a submitted or otherwise frozen scientific version. A
+  copied TeX or R version is created only when an external submission system
+  explicitly requires a frozen standalone package.
 
 ## Cleanup completed
 
-On 2026-08-10, the six redundant analysis scripts listed above, their four superseded clean-output directories, four superseded plot directories, and 17 obsolete manuscript figure copies were moved to the Windows Recycle Bin. They remain recoverable until the Recycle Bin is emptied. Current v12 files and DWD dependencies were retained.
+On 2026-08-10, six redundant Manuscript 3 analysis scripts, four superseded
+clean-output directories, four superseded plot directories, and 17 obsolete
+manuscript figure copies were moved to the Windows Recycle Bin. They remain
+recoverable until the Recycle Bin is emptied. The two canonical scripts and
+all upstream cleaning dependencies were retained.
