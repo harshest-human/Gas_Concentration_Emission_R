@@ -2,6 +2,12 @@
 
 ## Canonical scripts
 
+- `01_prepare_all_campaign_gas_data.R`: the unified upstream gas-preparation
+  script. It reads FTIR raw exports and CRDS step-average inputs, provides a
+  raw CRDS reader and 60-s-flush averaging function, applies the campaign
+  metadata mappings, writes analyser-wise traceable files, writes one combined
+  CSV per campaign, and row-binds all four campaigns. Its validation outputs
+  are isolated in `clean_data/prepared_campaigns_v01`.
 - `manuscript3_pipeline_v12.R`: the single executable pipeline for Campaigns 1 and 2, ratios, descriptive statistics, SP25 comparisons, multiscale precision, mixed-effects models, Shannon entropy, meteorological associations, tables, and figures.
 - `dwd_weather_figures_manuscript3.R`: retained as the second canonical script because it creates the DWD weather input and the two meteorological figures used by the manuscript.
 
