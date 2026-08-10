@@ -8,15 +8,23 @@
   metadata mappings, writes analyser-wise traceable files, writes one combined
   CSV per campaign, and row-binds all four campaigns. Its validation outputs
   are isolated in `clean_data/prepared_campaigns_v01`.
-- `manuscript3_pipeline_v12.R`: the single executable pipeline for Campaigns 1 and 2, ratios, descriptive statistics, SP25 comparisons, multiscale precision, mixed-effects models, Shannon entropy, meteorological associations, tables, and figures.
+- `03_manuscript3_plots_tables.R`: the current Manuscript 3 plotting and table
+  pipeline for Campaigns 1 and 2. Median-based representativeness is primary;
+  mean-based performance is retained for comparison. It produces shared-scale
+  gas and ratio boxplots, mean +/- SD and median +/- SD figures, median-based
+  sampling-point rankings, and Campaign 2 gas-and-ratio Shannon entropy. It
+  deliberately excludes CV and relative error and does not modify LaTeX.
 - `dwd_weather_figures_manuscript3.R`: retained as the second canonical script because it creates the DWD weather input and the two meteorological figures used by the manuscript.
 
-All manuscript concentration outputs---including time series, relative error
-(RE), coefficient of variation (CV), confidence intervals, median absolute
-deviation, entropy, statistical models, summary tables, and manuscript
-figures---must be produced through `manuscript3_pipeline_v12.R`. New analyses
-should be added as functions or clearly labelled sections in this script, not
-as additional manuscript-analysis scripts.
+New Manuscript 3 concentration analyses, tables, and plots must be added as
+functions or clearly labelled sections in `03_manuscript3_plots_tables.R`, not
+as additional analysis scripts. CV and relative error remain deferred until
+they are explicitly reinstated in the study plan.
+
+`manuscript3_pipeline_v12.R` is retained temporarily only to reproduce the
+currently compiled pre-revision manuscript. It is superseded for new analysis
+by `03_manuscript3_plots_tables.R` and can be recycled once the new figures and
+tables are approved for manuscript integration.
 
 ## Supporting upstream scripts retained
 
@@ -33,7 +41,7 @@ These create accepted clean inputs and remain outside the manuscript-analysis co
 
 - `main.tex` is the single canonical manuscript source. Scientific and
   editorial changes are tracked with Git commits instead of copied TeX files.
-- The two canonical R scripts above are edited in place and tracked with Git.
+- The canonical R scripts above are edited in place and tracked with Git.
 - Generated tables, clean derivatives, and figures are reproducible outputs;
   they must not be edited manually.
 - A Git tag may mark a submitted or otherwise frozen scientific version. A
