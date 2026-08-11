@@ -40,6 +40,175 @@ indirect.CO2.balance <- function(df) {
                 )
 }
 
+# Standard-parameter CO2 balance for multi-campaign comparisons.
+#
+# The function deliberately does not apply an indoor-temperature correction or
+# a diurnal animal-activity correction to animal CO2 production. DWD
+# temperature is used only in the ideal-gas conversion from ppm to mg m-3.
+# The default animal constants reproduce the agreed full-occupancy scenario:
+# 58 cows, 500 kg cow-1, median milk production of 31.21864407 kg cow-1 d-1,
+# and a constant mean pregnancy day of 119.5510204 d.
+indirect.CO2.balance.std <- function(
+        df,
+        inside_suffix = "in",
+        outside_suffix = "out",
+        dwd_temp_col = "temp_dwd",
+        pressure_col = NULL,
+        n_dairy_cows = 58,
+        cow_weight_kg = 500,
+        milk_kg_cow_d = 31.21864407,
+        pregnancy_day = 119.5510204,
+        pco2_per_hpu_m3_h = 0.185,
+        assumed_pressure_pa = 101325,
+        min_delta_co2_ppm = 0,
+        low_delta_co2_ppm = 200
+) {
+        required_gas_cols <- unlist(lapply(
+                c("CO2", "CH4", "NH3"),
+                function(gas) paste0(gas, "_ppm_", c(inside_suffix, outside_suffix))
+        ))
+        required_cols <- c(required_gas_cols, dwd_temp_col)
+        if (!is.null(pressure_col)) required_cols <- c(required_cols, pressure_col)
+
+        missing_cols <- setdiff(required_cols, names(df))
+        if (length(missing_cols) > 0) {
+                stop(
+                        "indirect.CO2.balance.std(): missing required column(s): ",
+                        paste(missing_cols, collapse = ", ")
+                )
+        }
+        if (!is.numeric(n_dairy_cows) || length(n_dairy_cows) != 1L ||
+            !is.finite(n_dairy_cows) || n_dairy_cows <= 0) {
+                stop("n_dairy_cows must be one positive finite number.")
+        }
+        if (!is.numeric(cow_weight_kg) || length(cow_weight_kg) != 1L ||
+            !is.finite(cow_weight_kg) || cow_weight_kg <= 0) {
+                stop("cow_weight_kg must be one positive finite number.")
+        }
+
+        gas_col <- function(gas, suffix) paste0(gas, "_ppm_", suffix)
+        mass_col <- function(gas, suffix) paste0(gas, "_mgm3_", suffix)
+
+        # Constants used by the ideal-gas conversion.
+        gas_constant <- 8.314462618 # Pa m3 mol-1 K-1
+        molar_mass <- c(CO2 = 44.0095, CH4 = 16.04246, NH3 = 17.03052)
+
+        # Uncorrected animal heat production at the agreed standard inputs.
+        phi_w_per_cow <- 5.6 * cow_weight_kg^0.75 +
+                22 * milk_kg_cow_d +
+                1.6e-5 * pregnancy_day^3
+        hpu_per_cow <- phi_w_per_cow / 1000
+        pco2_cow_m3_h <- pco2_per_hpu_m3_h * hpu_per_cow
+        pco2_barn_m3_h <- pco2_cow_m3_h * n_dairy_cows
+        livestock_units <- n_dairy_cows * cow_weight_kg / 500
+
+        result <- df %>%
+                dplyr::mutate(
+                        n_dairycows_std = n_dairy_cows,
+                        m_weight_std_kg = cow_weight_kg,
+                        Y1_milk_prod_std = milk_kg_cow_d,
+                        p_pregnancy_day_std = pregnancy_day,
+                        LU_std = livestock_units,
+                        phi_std_W_cow = phi_w_per_cow,
+                        t_factor_std = 1,
+                        A_cor_std = 1,
+                        hpu_std_cow = hpu_per_cow,
+                        PCO2_std_m3_h_cow = pco2_cow_m3_h,
+                        PCO2_std_m3_h_barn = pco2_barn_m3_h,
+                        gas_temperature_K = .data[[dwd_temp_col]] + 273.15,
+                        gas_pressure_Pa = if (is.null(pressure_col)) {
+                                assumed_pressure_pa
+                        } else {
+                                .data[[pressure_col]]
+                        },
+                        pressure_assumed = is.null(pressure_col),
+                        gas_conversion_valid = is.finite(gas_temperature_K) &
+                                gas_temperature_K > 0 &
+                                is.finite(gas_pressure_Pa) &
+                                gas_pressure_Pa > 0
+                )
+
+        for (gas in names(molar_mass)) {
+                for (suffix in c(inside_suffix, outside_suffix)) {
+                        ppm_name <- gas_col(gas, suffix)
+                        mgm3_name <- mass_col(gas, suffix)
+                        result <- result %>%
+                                dplyr::mutate(
+                                        !!mgm3_name := dplyr::if_else(
+                                                gas_conversion_valid,
+                                                .data[[ppm_name]] * 1e-6 *
+                                                        gas_pressure_Pa * molar_mass[[gas]] * 1e3 /
+                                                        (gas_constant * gas_temperature_K),
+                                                NA_real_
+                                        )
+                                )
+                }
+        }
+
+        co2_in_ppm <- gas_col("CO2", inside_suffix)
+        co2_out_ppm <- gas_col("CO2", outside_suffix)
+        co2_in_mgm3 <- mass_col("CO2", inside_suffix)
+        co2_out_mgm3 <- mass_col("CO2", outside_suffix)
+
+        result <- result %>%
+                dplyr::mutate(
+                        delta_CO2_ppm = .data[[co2_in_ppm]] - .data[[co2_out_ppm]],
+                        delta_CO2_mgm3 = .data[[co2_in_mgm3]] - .data[[co2_out_mgm3]],
+                        delta_co2_positive = is.finite(delta_CO2_ppm) & delta_CO2_ppm > 0,
+                        delta_co2_lt_200ppm = delta_co2_positive &
+                                delta_CO2_ppm < low_delta_co2_ppm,
+                        Q_vent_m3_h_barn = dplyr::if_else(
+                                delta_co2_positive & delta_CO2_ppm >= min_delta_co2_ppm,
+                                PCO2_std_m3_h_barn * 1e6 / delta_CO2_ppm,
+                                NA_real_
+                        ),
+                        Q_vent_m3_h_cow = Q_vent_m3_h_barn / n_dairy_cows,
+                        Q_vent_m3_h_LU = Q_vent_m3_h_barn / LU_std
+                )
+
+        for (gas in c("CH4", "NH3")) {
+                gas_in_mgm3 <- mass_col(gas, inside_suffix)
+                gas_out_mgm3 <- mass_col(gas, outside_suffix)
+                delta_name <- paste0("delta_", gas, "_mgm3")
+                emission_name <- paste0("e_", gas, "_gh_barn")
+                emission_cow_name <- paste0("e_", gas, "_gh_cow")
+                emission_lu_name <- paste0("e_", gas, "_ghLU")
+                annual_name <- paste0("e_", gas, "_kg_year_LU_rate_equivalent")
+                negative_name <- paste0("delta_", tolower(gas), "_negative")
+
+                result <- result %>%
+                        dplyr::mutate(
+                                !!delta_name := .data[[gas_in_mgm3]] - .data[[gas_out_mgm3]],
+                                !!negative_name := is.finite(.data[[delta_name]]) &
+                                        .data[[delta_name]] < 0,
+                                !!emission_name := .data[[delta_name]] *
+                                        Q_vent_m3_h_barn / 1000,
+                                !!emission_cow_name := .data[[emission_name]] / n_dairy_cows,
+                                !!emission_lu_name := .data[[emission_name]] / LU_std,
+                                !!annual_name := .data[[emission_lu_name]] * 8760 / 1000
+                        )
+        }
+
+        for (gas in c("CH4", "NH3")) {
+                for (suffix in c(inside_suffix, outside_suffix)) {
+                        ratio_name <- paste0("r_", gas, "_CO2_", suffix, "_pct")
+                        gas_mgm3 <- mass_col(gas, suffix)
+                        co2_mgm3 <- mass_col("CO2", suffix)
+                        result <- result %>%
+                                dplyr::mutate(
+                                        !!ratio_name := dplyr::if_else(
+                                                is.finite(.data[[co2_mgm3]]) &
+                                                        .data[[co2_mgm3]] != 0,
+                                                .data[[gas_mgm3]] / .data[[co2_mgm3]] * 100,
+                                                NA_real_
+                                        )
+                                )
+                }
+        }
+
+        result
+}
+
 # Development of pivot longer function
 reshaper <- function(df) {
         library(dplyr)

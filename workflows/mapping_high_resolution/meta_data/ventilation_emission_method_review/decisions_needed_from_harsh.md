@@ -1,0 +1,14 @@
+# Decisions needed from Harsh
+
+1. **Target control volume.** Confirm whether the calf area, milking area, manure pit and any connected spaces are inside the measured barn boundary. Consequence: uncounted animals/manure bias CO2 production, Q and whole-barn gas emissions.
+2. **Floor/manure CO2 factor.** Confirm closed versus partly slatted floor and manure storage/flushing configuration. Consequence: VERA's 0.18 versus 0.20 m3 CO2 h-1 HPU-1 choice, or need for measured manure CO2/artificial tracer.
+3. **Animal production data.** Provide herd/category mean live mass, hourly category counts, milk yield and pregnancy information (or authorise documented VERA defaults with sensitivity ranges). Consequence: tracer production and LU normalisation remain unidentified.
+4. **Concentration basis.** Confirm for each FTIR/CRDS whether CO2, CH4 and NH3 exports are wet or dry mole fractions and whether H2O correction is already internal. Consequence: a second or missing correction biases every concentration difference.
+5. **Pressure data/reference condition.** Identify barometric pressure and whether any reported flow/production volumes are actual or standard volumes. Consequence: ppm-to-mass conversion cannot be made consistently.
+6. **Primary spatial estimator.** Choose robust median, arithmetic mean, or wind-sector inlet/outlet pairing as primary; retain the others as sensitivity analyses. Consequence: Janke et al. show this choice can dominate Q uncertainty.
+7. **Eligible sampling geometry.** Confirm which points are >=2 m from openings, affected by fans/leaks, or represent calf/manure zones. Consequence: spatial estimator and control volume change.
+8. **Background strategy.** Confirm whether `out` is >=5 m away and whether multiple perimeter/background points exist. Consequence: wind-dependent incoming concentration may be unobtainable in some campaigns.
+9. **Temporal interpretation.** Confirm whether hourly results are the manuscript endpoint and whether annual values should be labelled rate-equivalents or seasonally weighted emission factors. Consequence: multiplication by 8760 may otherwise overstate representativeness.
+10. **Activity correction.** Decide on primary VERA daily-mean method without optional activity correction versus a secondary Pedersen/Janke diurnal activity model after coefficients are verified. Consequence: hourly tracer production profile changes.
+11. **Negative enhancements.** Approve signed retention as primary with a failure flag rather than zero truncation. Consequence: truncation creates positive bias.
+12. **Study-specific signal-to-noise rule.** Define from analyser precision/collocation data; retain a separate `<200 ppm` sensitivity flag. Consequence: no authoritative universal low-delta exclusion exists, but very small deltas yield unstable Q.
