@@ -27,7 +27,7 @@ The separate DWD preparation and meteorological-figure script is:
 
 ```text
 D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/
-mapping_high_resolution/scripts/dwd_weather_figures_manuscript3.R
+mapping_high_resolution/scripts/02_manuscript3_dwd_weather.R
 ```
 
 Clean manuscript data and tables are written to:

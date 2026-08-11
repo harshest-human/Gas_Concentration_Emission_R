@@ -10,7 +10,7 @@
   It produces median-based representativeness tables, mean and median with SD,
   shared-scale concentration and ratio plots, and Shannon entropy. It does not
   modify LaTeX and currently excludes CV and relative error.
-- `dwd_weather_figures_manuscript3.R`: prepares DWD regional meteorology and
+- `02_manuscript3_dwd_weather.R`: prepares DWD regional meteorology and
   produces the Manuscript 3 weather figures.
 
 ## Active Campaign 3--4 supporting workflow
