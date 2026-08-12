@@ -18,6 +18,7 @@ suppressPackageStartupMessages({
   library(lubridate)
   library(lme4)
   library(emmeans)
+  library(patchwork)
 })
 emm_options(lmer.df = "asymptotic")
 
@@ -68,6 +69,10 @@ read_campaign <- function(number) {
 }
 
 x <- rbindlist(list(read_campaign(1), read_campaign(2)), use.names = TRUE)
+# Preserve the complete prepared gas table for the CO2-balance calculation.
+# The plotting/statistical copy below converts non-positive values to NA, but
+# the emissions audit must retain them so validity rules can be applied later.
+x_emission_source <- copy(x)
 for (g in c("CO2", "CH4", "NH3", "H2O")) {
   x[!is.finite(get(g)) | get(g) <= 0, (g) := NA_real_]
 }
@@ -80,6 +85,12 @@ x[, `:=`(
 x[, sampling.point.numeric := suppressWarnings(as.integer(sampling.point))]
 x[, internal := !is.na(sampling.point.numeric) &
                   sampling.point.numeric >= 1L & sampling.point.numeric <= 51L]
+# Campaign 2 FTIR2 operated only during three short sessions. Its internal
+# points 49 and 51 are retained for transparent descriptive auditing but are
+# ineligible for Campaign 2 inferential statistics. The primary Campaign 2
+# analysis therefore uses the 32 continuously cycled CRDS sampling points.
+x[, analysis.eligible := internal &
+    !(campaign == "Campaign 2" & !grepl("^CRDS", analyser))]
 x[, height := fifelse(
   !internal, "reference",
   c("top", "middle", "bottom")[(sampling.point.numeric - 1L) %% 3L + 1L]
@@ -90,7 +101,8 @@ x[, campaign := factor(campaign, levels = c("Campaign 1", "Campaign 2"))]
 long <- melt(
   x,
   id.vars = c("DATE.TIME", "campaign", "analyser", "sampling.point",
-              "sampling.point.numeric", "internal", "height"),
+              "sampling.point.numeric", "internal", "analysis.eligible",
+              "height"),
   measure.vars = responses,
   variable.name = "response", value.name = "value"
 )[is.finite(value) & value > 0]
@@ -119,15 +131,24 @@ describe <- function(v) {
 
 location_descriptives <- long[, describe(value),
   by = .(campaign, response, sampling.point, sampling.point.numeric,
-         internal, height)]
+         internal, analysis.eligible, height)]
 setorder(location_descriptives, campaign, response, sampling.point.numeric)
 fwrite(location_descriptives,
        file.path(table_dir, "Table_01_sampling_point_descriptives.csv"))
 
-campaign_descriptives <- long[internal == TRUE, describe(value),
+campaign_descriptives <- long[analysis.eligible == TRUE, describe(value),
   by = .(campaign, response)]
 fwrite(campaign_descriptives,
        file.path(table_dir, "Table_02_campaign_descriptives.csv"))
+
+eligibility_audit <- unique(x[, .(
+  campaign, analyser, sampling.point, sampling.point.numeric,
+  internal, analysis.eligible
+)])
+setorder(eligibility_audit, campaign, analysis.eligible,
+         sampling.point.numeric, analyser)
+fwrite(eligibility_audit,
+       file.path(table_dir, "Table_00_sampling_point_analysis_eligibility.csv"))
 
 
 ###############################################################################
@@ -137,7 +158,7 @@ fwrite(campaign_descriptives,
 # The instruments visited sampling points sequentially. Clock-aligned two-hour
 # blocks approximate a complete network cycle and are therefore the inferential
 # unit; raw four-minute rows are not treated as simultaneous observations.
-h1 <- long[internal == TRUE & response %chin% c("CO2", "CH4", "NH3")]
+h1 <- long[analysis.eligible == TRUE & response %chin% c("CO2", "CH4", "NH3")]
 h1[, `:=`(
   block.2h = floor_date(DATE.TIME, "2 hours"),
   horizontal.position = (sampling.point.numeric - 1L) %/% 3L + 1L
@@ -292,7 +313,7 @@ fwrite(pca_loadings, file.path(table_dir, "Table_13_H1_PCA_loadings.csv"))
 # weighted median across the available internal sampling points is the hourly
 # network reference. This prevents locations with more raw rows from receiving
 # greater weight.
-hourly_location <- long[internal == TRUE,
+hourly_location <- long[analysis.eligible == TRUE,
   .(location.median = median(value), location.mean = mean(value), raw.rows = .N),
   by = .(
     campaign, response,
@@ -400,7 +421,7 @@ fwrite(entropy[campaign == "Campaign 2"], file.path(table_dir,
 # Spatial entropy describes the distribution across sampling points within an
 # aligned two-hour network block. Normalisation by log(N) permits comparison
 # between campaigns with different numbers of available sampling points.
-entropy_2h_locations <- long[internal == TRUE, .(
+entropy_2h_locations <- long[analysis.eligible == TRUE, .(
   location.median = median(value), raw.rows = .N
 ), by = .(
   campaign, response, block.2h = floor_date(DATE.TIME, "2 hours"),
@@ -438,6 +459,530 @@ fwrite(entropy_summary, file.path(table_dir,
 
 
 ###############################################################################
+##### STANDARD CO2-BALANCE VENTILATION AND EMISSION ESTIMATES
+###############################################################################
+
+# Every aligned row is retained. Invalid or unavailable calculations remain in
+# the CSV with the function's validity flags and NA estimates; no subsequent
+# filtering is performed here.
+co2_balance_function <- file.path(
+  dirname(workflow), "utils", "indirect.CO2.balance function.R"
+)
+if (!file.exists(co2_balance_function)) {
+  stop("CO2-balance function was not found: ", co2_balance_function)
+}
+source(co2_balance_function, local = environment())
+if (!exists("indirect.CO2.balance.st", mode = "function")) {
+  stop("indirect.CO2.balance.st() was not defined by: ", co2_balance_function)
+}
+
+median_keep_all <- function(v) {
+  # Missing values cannot contribute to a median, but zero and negative values
+  # are deliberately retained. Return NA only when the entire group is missing.
+  if (all(is.na(v))) return(NA_real_)
+  median(v, na.rm = TRUE)
+}
+
+emission_2h <- x_emission_source[, .(
+  CO2 = median_keep_all(CO2),
+  CH4 = median_keep_all(CH4),
+  NH3 = median_keep_all(NH3),
+  gas.raw.rows = .N,
+  gas.nonmissing.CO2 = sum(!is.na(CO2)),
+  gas.nonmissing.CH4 = sum(!is.na(CH4)),
+  gas.nonmissing.NH3 = sum(!is.na(NH3))
+), by = .(
+  campaign, analyser,
+  block.2h = floor_date(DATE.TIME, "2 hours"),
+  sampling.point
+)]
+emission_2h[, sampling.point.numeric := suppressWarnings(as.integer(sampling.point))]
+
+# Campaign 1 used `s` as the outside line. Campaign 2 FTIR2 selector position 3
+# maps to sampling point 52 and is used here as the campaign outside reference.
+emission_2h[, reference.role := fcase(
+  campaign == "Campaign 1" & tolower(sampling.point) == "s", "outside",
+  campaign == "Campaign 2" & sampling.point == "52", "outside",
+  !is.na(sampling.point.numeric) & sampling.point.numeric %between% c(1L, 51L),
+  "inside_sampling_point",
+  default = "unclassified"
+)]
+emission_2h[, analysis.eligible :=
+  reference.role == "inside_sampling_point" &
+    !(campaign == "Campaign 2" & !grepl("^CRDS", analyser))]
+
+outside_2h <- emission_2h[reference.role == "outside", .(
+  CO2_ppm_out = median_keep_all(CO2),
+  CH4_ppm_out = median_keep_all(CH4),
+  NH3_ppm_out = median_keep_all(NH3),
+  outside.raw.rows = sum(gas.raw.rows),
+  outside.source = paste(sort(unique(sampling.point)), collapse = "+")
+), by = .(campaign, block.2h)]
+
+inside_points <- emission_2h[reference.role == "inside_sampling_point", .(
+  campaign, block.2h, estimate.level = "sampling_point", sampling.point,
+  analyser, analysis.eligible,
+  sampling.points.in.estimate = 1L,
+  CO2_ppm_in = CO2, CH4_ppm_in = CH4, NH3_ppm_in = NH3,
+  inside.raw.rows = gas.raw.rows,
+  inside.nonmissing.CO2 = gas.nonmissing.CO2,
+  inside.nonmissing.CH4 = gas.nonmissing.CH4,
+  inside.nonmissing.NH3 = gas.nonmissing.NH3
+)]
+
+inside_network <- emission_2h[analysis.eligible == TRUE, .(
+  estimate.level = "network_median",
+  sampling.point = "network_median",
+  analyser = "eligible_network",
+  analysis.eligible = TRUE,
+  sampling.points.in.estimate = uniqueN(sampling.point),
+  CO2_ppm_in = median_keep_all(CO2),
+  CH4_ppm_in = median_keep_all(CH4),
+  NH3_ppm_in = median_keep_all(NH3),
+  inside.raw.rows = sum(gas.raw.rows),
+  inside.nonmissing.CO2 = sum(!is.na(CO2)),
+  inside.nonmissing.CH4 = sum(!is.na(CH4)),
+  inside.nonmissing.NH3 = sum(!is.na(NH3))
+), by = .(campaign, block.2h)]
+
+emission_input <- rbindlist(
+  list(inside_points, inside_network), use.names = TRUE, fill = TRUE
+)
+emission_input <- outside_2h[emission_input,
+  on = .(campaign, block.2h)]
+
+weather_path <- file.path(
+  workflow, "clean_data", "manuscript3_weather",
+  "dwd_potsdam_03987_hourly_2024_campaign_periods.csv"
+)
+if (!file.exists(weather_path)) {
+  stop("DWD weather input was not found: ", weather_path)
+}
+weather_emission <- fread(weather_path)
+weather_emission[, DATE.TIME := with_tz(
+  ymd_hms(DATE.TIME, tz = "UTC", quiet = TRUE), "Europe/Berlin"
+)]
+weather_2h <- weather_emission[, .(
+  temp_dwd = if (all(is.na(temperature_C))) NA_real_ else
+    mean(temperature_C, na.rm = TRUE),
+  pressure_dwd_Pa = NA_real_,
+  dwd.hourly.rows = .N,
+  dwd.temperature.rows = sum(!is.na(temperature_C))
+), by = .(block.2h = floor_date(DATE.TIME, "2 hours"))]
+
+emission_input <- weather_2h[emission_input, on = "block.2h"]
+setorder(emission_input, campaign, block.2h, estimate.level, sampling.point)
+
+emission_result <- indirect.CO2.balance.st(
+  as.data.frame(emission_input),
+  dwd_temp_col = "temp_dwd",
+  pressure_col = NULL,
+  n_dairy_cows = 58,
+  cow_weight_kg = 500,
+  milk_kg_cow_d = 31.21864407,
+  pregnancy_day = 119.5510204,
+  min_delta_co2_ppm = 0,
+  low_delta_co2_ppm = 200,
+  annualisation_hours = 8760
+)
+emission_result <- as.data.table(emission_result)
+emission_result[, campaign.result.role := fcase(
+  campaign == "Campaign 1", "primary_campaign_result",
+  campaign == "Campaign 2" & estimate.level == "sampling_point" &
+    analysis.eligible == FALSE, "retained_audit_excluded_from_inference",
+  campaign == "Campaign 2", "exploratory_only_incomplete_outside_reference",
+  default = "unclassified"
+)]
+emission_result[, calculation.row := .I]
+setcolorder(emission_result, c(
+  "calculation.row", "campaign", "block.2h", "estimate.level",
+  "sampling.point", "sampling.points.in.estimate"
+))
+
+fwrite(
+  emission_result,
+  file.path(output_root,
+            "H2_standard_CO2_balance_ventilation_emissions_all_rows.csv"),
+  dateTimeAs = "write.csv"
+)
+fwrite(
+  emission_result[estimate.level == "network_median"],
+  file.path(output_root,
+            "H2_standard_CO2_balance_network_median_all_rows.csv"),
+  dateTimeAs = "write.csv"
+)
+
+emission_audit <- emission_result[, .(
+  rows = .N,
+  rows.with.outside = sum(is.finite(CO2_ppm_out)),
+  rows.with.temperature = sum(is.finite(temp_dwd)),
+  rows.positive.delta.CO2 = sum(delta_co2_positive, na.rm = TRUE),
+  rows.low.delta.CO2 = sum(delta_co2_lt_200ppm, na.rm = TRUE),
+  rows.finite.Q = sum(is.finite(Q_vent_m3_h_barn)),
+  rows.negative.CH4.enhancement = sum(delta_ch4_negative, na.rm = TRUE),
+  rows.negative.NH3.enhancement = sum(delta_nh3_negative, na.rm = TRUE),
+  rows.finite.CH4.emission = sum(is.finite(e_CH4_kg_year_LU)),
+  rows.finite.NH3.emission = sum(is.finite(e_NH3_kg_year_LU))
+), by = .(campaign, estimate.level)]
+fwrite(emission_audit,
+       file.path(table_dir, "Table_16_H2_CO2_balance_unfiltered_audit.csv"))
+
+campaign2_exclusion_audit <- unique(emission_result[
+  campaign == "Campaign 2" & estimate.level == "sampling_point",
+  .(sampling.point, analyser, analysis.eligible, campaign.result.role)
+])
+setorder(campaign2_exclusion_audit, analysis.eligible, sampling.point)
+fwrite(campaign2_exclusion_audit,
+       file.path(table_dir, "Table_17_Campaign2_sampling_point_eligibility.csv"))
+
+
+###############################################################################
+##### CAMPAIGN 1 SAMPLING CONFIGURATION AND DENSITY EFFECTS ON EMISSIONS
+###############################################################################
+
+add_emission_validity <- function(z) {
+  z <- as.data.table(z)
+  z[, delta.CO2.validity := fcase(
+    !is.finite(delta_CO2_ppm), "missing",
+    delta_CO2_ppm <= 0, "non-positive",
+    delta_CO2_ppm < 70, "below-70-ppm",
+    delta_CO2_ppm < 200, "70-to-199-ppm-sensitivity",
+    default = "at-least-200-ppm-primary"
+  )]
+  z[, primary.valid := delta.CO2.validity == "at-least-200-ppm-primary" &
+      is.finite(Q_vent_m3_h_LU)]
+  z[, sensitivity.valid := delta_CO2_ppm >= 70 &
+      is.finite(Q_vent_m3_h_LU)]
+  z
+}
+
+emission_result <- add_emission_validity(emission_result)
+# Rewrite the two unfiltered files with the validity classification included.
+fwrite(emission_result, file.path(
+  output_root, "H2_standard_CO2_balance_ventilation_emissions_all_rows.csv"
+), dateTimeAs = "write.csv")
+fwrite(emission_result[estimate.level == "network_median"], file.path(
+  output_root, "H2_standard_CO2_balance_network_median_all_rows.csv"
+), dateTimeAs = "write.csv")
+
+c1_config_source <- copy(emission_2h[
+  campaign == "Campaign 1" & reference.role == "inside_sampling_point"
+])
+c1_config_source[, `:=`(
+  height = c("top", "middle", "bottom")[(sampling.point.numeric - 1L) %% 3L + 1L],
+  horizontal.position = (sampling.point.numeric - 1L) %/% 3L + 1L
+)]
+
+configuration_membership <- rbindlist(list(
+  c1_config_source[, .(block.2h, sampling.point, CO2, CH4, NH3,
+                       configuration = "all_51")],
+  c1_config_source[height == "top", .(block.2h, sampling.point, CO2, CH4, NH3,
+                                      configuration = "top_17")],
+  c1_config_source[height == "middle", .(block.2h, sampling.point, CO2, CH4, NH3,
+                                         configuration = "middle_17")],
+  c1_config_source[height == "bottom", .(block.2h, sampling.point, CO2, CH4, NH3,
+                                         configuration = "bottom_17")],
+  c1_config_source[height != "middle", .(block.2h, sampling.point, CO2, CH4, NH3,
+                                         configuration = "top_bottom_34")],
+  c1_config_source[height != "middle" & !sampling.point.numeric %in% c(19L, 40L),
+    .(block.2h, sampling.point, CO2, CH4, NH3,
+      configuration = "campaign2_like_32")]
+), use.names = TRUE)
+
+configuration_input <- configuration_membership[, .(
+  sampling.points.in.estimate = uniqueN(sampling.point),
+  CO2_ppm_in = median_keep_all(CO2),
+  CH4_ppm_in = median_keep_all(CH4),
+  NH3_ppm_in = median_keep_all(NH3)
+), by = .(block.2h, configuration)]
+configuration_input[, campaign := "Campaign 1"]
+configuration_input <- outside_2h[campaign == "Campaign 1"][
+  configuration_input, on = .(campaign, block.2h)
+]
+configuration_input <- weather_2h[configuration_input, on = "block.2h"]
+
+configuration_result <- indirect.CO2.balance.st(
+  as.data.frame(configuration_input), dwd_temp_col = "temp_dwd",
+  n_dairy_cows = 58, cow_weight_kg = 500,
+  milk_kg_cow_d = 31.21864407, pregnancy_day = 119.5510204,
+  min_delta_co2_ppm = 0, low_delta_co2_ppm = 200,
+  annualisation_hours = 8760
+)
+configuration_result <- add_emission_validity(configuration_result)
+configuration_result <- as.data.table(configuration_result)
+
+baseline <- configuration_result[configuration == "all_51", .(
+  block.2h,
+  Q.reference = Q_vent_m3_h_LU,
+  CH4.reference = e_CH4_ghLU,
+  NH3.reference = e_NH3_ghLU,
+  reference.primary.valid = primary.valid
+)]
+configuration_result <- baseline[configuration_result, on = "block.2h"]
+configuration_result[, `:=`(
+  Q.relative.error.percent = 100 * (Q_vent_m3_h_LU - Q.reference) / Q.reference,
+  CH4.relative.error.percent = 100 * (e_CH4_ghLU - CH4.reference) / CH4.reference,
+  NH3.relative.error.percent = 100 * (e_NH3_ghLU - NH3.reference) / NH3.reference,
+  CH4_CO2 = CH4_ppm_in / CO2_ppm_in,
+  NH3_CO2 = NH3_ppm_in / CO2_ppm_in,
+  NH3_CH4 = NH3_ppm_in / CH4_ppm_in
+)]
+fwrite(configuration_result, file.path(
+  output_root, "H2_Campaign1_sampling_configuration_emissions_all_rows.csv"
+), dateTimeAs = "write.csv")
+
+configuration_summary <- configuration_result[
+  primary.valid == TRUE & reference.primary.valid == TRUE,
+  .(
+    valid.blocks = .N,
+    median.sampling.points = as.numeric(median(sampling.points.in.estimate)),
+    Q.median = median(Q_vent_m3_h_LU),
+    Q.abs.RE.median = median(abs(Q.relative.error.percent), na.rm = TRUE),
+    Q.abs.RE.q95 = quantile(abs(Q.relative.error.percent), 0.95, na.rm = TRUE),
+    CH4.median = median(e_CH4_ghLU, na.rm = TRUE),
+    CH4.abs.RE.median = median(abs(CH4.relative.error.percent), na.rm = TRUE),
+    CH4.abs.RE.q95 = quantile(abs(CH4.relative.error.percent), 0.95, na.rm = TRUE),
+    NH3.median = median(e_NH3_ghLU, na.rm = TRUE),
+    NH3.abs.RE.median = median(abs(NH3.relative.error.percent), na.rm = TRUE),
+    NH3.abs.RE.q95 = quantile(abs(NH3.relative.error.percent), 0.95, na.rm = TRUE)
+  ), by = configuration
+]
+fwrite(configuration_summary, file.path(
+  table_dir, "Table_18_Campaign1_sampling_configuration_emission_effects.csv"
+))
+
+# Balanced-density simulation: randomly select horizontal positions and retain
+# all three heights at each selected position. Each subset is fixed across time,
+# representing a physically installed reduced network rather than resampling
+# points independently at every block.
+set.seed(20260812)
+density_levels <- c(1L, 2L, 4L, 8L, 12L, 17L)
+density_design <- rbindlist(lapply(density_levels, function(k) {
+  reps <- if (k == 17L) 1L else 100L
+  rbindlist(lapply(seq_len(reps), function(rep_id) data.table(
+    horizontal.position = sample(1:17, k),
+    horizontal.positions = k,
+    sampling.points = 3L * k,
+    replicate = rep_id
+  )))
+}))
+
+# The explicit loop is easier to audit than a cartesian expansion and keeps
+# memory bounded for the 100 fixed-network replicates per density.
+density_networks <- unique(
+  density_design[, .(horizontal.positions, sampling.points, replicate)]
+)
+density_input_list <- vector("list", nrow(density_networks))
+for (i in seq_len(nrow(density_networks))) {
+  design_i <- density_networks[i]
+  selected <- density_design[
+    horizontal.positions == design_i$horizontal.positions &
+      replicate == design_i$replicate,
+    horizontal.position
+  ]
+  density_input_list[[i]] <- c1_config_source[
+    horizontal.position %in% selected,
+    .(
+      CO2_ppm_in = median_keep_all(CO2),
+      CH4_ppm_in = median_keep_all(CH4),
+      NH3_ppm_in = median_keep_all(NH3)
+    ), by = block.2h
+  ][, `:=`(
+    horizontal.positions = design_i$horizontal.positions,
+    sampling.points.in.estimate = design_i$sampling.points,
+    replicate = design_i$replicate
+  )]
+}
+density_input <- rbindlist(density_input_list, use.names = TRUE)
+density_input[, campaign := "Campaign 1"]
+density_input <- outside_2h[campaign == "Campaign 1"][
+  density_input, on = .(campaign, block.2h)
+]
+density_input <- weather_2h[density_input, on = "block.2h"]
+density_result <- indirect.CO2.balance.st(
+  as.data.frame(density_input), dwd_temp_col = "temp_dwd",
+  n_dairy_cows = 58, cow_weight_kg = 500,
+  milk_kg_cow_d = 31.21864407, pregnancy_day = 119.5510204,
+  min_delta_co2_ppm = 0, low_delta_co2_ppm = 200,
+  annualisation_hours = 8760
+)
+density_result <- add_emission_validity(density_result)
+density_result <- baseline[as.data.table(density_result), on = "block.2h"]
+density_result[, `:=`(
+  Q.abs.RE = abs(100 * (Q_vent_m3_h_LU - Q.reference) / Q.reference),
+  CH4.abs.RE = abs(100 * (e_CH4_ghLU - CH4.reference) / CH4.reference),
+  NH3.abs.RE = abs(100 * (e_NH3_ghLU - NH3.reference) / NH3.reference)
+)]
+fwrite(density_result, file.path(
+  output_root, "H2_Campaign1_sampling_density_simulation_all_rows.csv"
+), dateTimeAs = "write.csv")
+
+density_summary <- melt(
+  density_result[primary.valid == TRUE & reference.primary.valid == TRUE],
+  id.vars = c("horizontal.positions", "sampling.points.in.estimate", "replicate"),
+  measure.vars = c("Q.abs.RE", "CH4.abs.RE", "NH3.abs.RE"),
+  variable.name = "outcome", value.name = "absolute.relative.error.percent"
+)[is.finite(absolute.relative.error.percent), .(
+  median.absolute.RE = median(absolute.relative.error.percent),
+  q1.absolute.RE = quantile(absolute.relative.error.percent, 0.25),
+  q3.absolute.RE = quantile(absolute.relative.error.percent, 0.75),
+  q95.absolute.RE = quantile(absolute.relative.error.percent, 0.95)
+), by = .(horizontal.positions, sampling.points.in.estimate, replicate, outcome)]
+fwrite(density_summary, file.path(
+  table_dir, "Table_19_Campaign1_sampling_density_simulation.csv"
+))
+
+ratio_outcome_correlations <- melt(
+  configuration_result[
+    configuration == "all_51" & primary.valid == TRUE,
+    .(block.2h, CH4_CO2, NH3_CO2, NH3_CH4,
+      Q_vent_m3_h_LU, e_CH4_ghLU, e_NH3_ghLU)
+  ],
+  id.vars = c("block.2h", "Q_vent_m3_h_LU", "e_CH4_ghLU", "e_NH3_ghLU"),
+  measure.vars = c("CH4_CO2", "NH3_CO2", "NH3_CH4"),
+  variable.name = "ratio", value.name = "ratio.value"
+)
+ratio_outcome_correlations <- melt(
+  ratio_outcome_correlations,
+  id.vars = c("block.2h", "ratio", "ratio.value"),
+  measure.vars = c("Q_vent_m3_h_LU", "e_CH4_ghLU", "e_NH3_ghLU"),
+  variable.name = "outcome", value.name = "outcome.value"
+)[is.finite(ratio.value) & ratio.value > 0 &
+    is.finite(outcome.value) & outcome.value > 0, .(
+  observations = .N,
+  spearman.rho = cor(ratio.value, outcome.value, method = "spearman"),
+  pearson.r = cor(log(ratio.value), log(outcome.value), method = "pearson")
+), by = .(ratio, outcome)]
+fwrite(ratio_outcome_correlations, file.path(
+  table_dir, "Table_20_Campaign1_ratio_ventilation_emission_correlations.csv"
+))
+
+
+###############################################################################
+##### REPRESENTATIVE HEIGHT/SP AND GAS-COUPLING DIAGNOSTICS
+###############################################################################
+
+block_location <- long[analysis.eligible == TRUE, .(
+  estimate = median(value)
+), by = .(
+  campaign, response, block.2h = floor_date(DATE.TIME, "2 hours"),
+  sampling.point.numeric, height
+)]
+
+# Leave-one-SP-out reference prevents a candidate point contributing to its own
+# benchmark. It is evaluated in Campaign 1, where all 51 points were installed.
+c1_loo <- block_location[campaign == "Campaign 1", {
+  v <- estimate
+  ref <- vapply(seq_along(v), function(i) {
+    other <- v[-i]
+    if (all(!is.finite(other))) NA_real_ else median(other, na.rm = TRUE)
+  }, numeric(1))
+  .(sampling.point.numeric, height, estimate,
+    reference.leave.one.out = ref)
+}, by = .(response, block.2h)]
+c1_loo[, `:=`(
+  difference = estimate - reference.leave.one.out,
+  absolute.percent.error = 100 * abs(estimate - reference.leave.one.out) /
+    reference.leave.one.out
+)]
+
+sp_representativeness <- c1_loo[
+  is.finite(estimate) & is.finite(reference.leave.one.out), {
+    fit <- lm(estimate ~ reference.leave.one.out)
+    .(
+      blocks = .N,
+      bias = median(difference),
+      normalised.MAE.percent = median(absolute.percent.error),
+      RMSE = sqrt(mean(difference^2)),
+      q90.absolute.percent.error = quantile(absolute.percent.error, 0.90),
+      spearman.rho = cor(estimate, reference.leave.one.out, method = "spearman"),
+      intercept = unname(coef(fit)[1]), slope = unname(coef(fit)[2])
+    )
+  }, by = .(response, sampling.point.numeric, height)
+]
+sp_representativeness[, `:=`(
+  rank.MAE = frank(normalised.MAE.percent, ties.method = "average") / .N,
+  rank.bias = frank(abs(bias), ties.method = "average") / .N,
+  rank.slope = frank(abs(1 - slope), ties.method = "average") / .N,
+  rank.correlation = frank(1 - spearman.rho, ties.method = "average") / .N
+), by = response]
+sp_representativeness[, response.score := rowMeans(.SD),
+  .SDcols = c("rank.MAE", "rank.bias", "rank.slope", "rank.correlation")]
+sp_composite <- sp_representativeness[, .(
+  composite.score = mean(response.score),
+  median.normalised.MAE.percent = median(normalised.MAE.percent),
+  median.absolute.bias = median(abs(bias)),
+  minimum.covered.blocks = min(blocks)
+), by = .(sampling.point.numeric, height)]
+setorder(sp_composite, composite.score)
+sp_composite[, overall.rank := .I]
+fwrite(sp_representativeness, file.path(
+  table_dir, "Table_21_Campaign1_SP_representativeness_by_response.csv"
+))
+fwrite(sp_composite, file.path(
+  table_dir, "Table_22_Campaign1_SP_composite_representativeness.csv"
+))
+
+# Each height is compared with the median of the other two heights, avoiding a
+# self-including whole-network reference.
+c1_height_block <- block_location[campaign == "Campaign 1", .(
+  height.estimate = median(estimate),
+  height.points = uniqueN(sampling.point.numeric)
+), by = .(response, block.2h, height)]
+c1_height_loo <- c1_height_block[, {
+  v <- height.estimate
+  ref <- vapply(seq_along(v), function(i) median(v[-i], na.rm = TRUE), numeric(1))
+  .(height, height.estimate, reference.other.heights = ref)
+}, by = .(response, block.2h)]
+c1_height_loo[, `:=`(
+  difference = height.estimate - reference.other.heights,
+  absolute.percent.error = 100 * abs(height.estimate - reference.other.heights) /
+    reference.other.heights
+)]
+height_representativeness <- c1_height_loo[, .(
+  blocks = .N,
+  median.bias = median(difference),
+  normalised.MAE.percent = median(absolute.percent.error),
+  RMSE = sqrt(mean(difference^2)),
+  q90.absolute.percent.error = quantile(absolute.percent.error, 0.90),
+  spearman.rho = cor(height.estimate, reference.other.heights,
+                     method = "spearman")
+), by = .(response, height)]
+fwrite(height_representativeness, file.path(
+  table_dir, "Table_23_Campaign1_height_representativeness.csv"
+))
+
+# Gas coupling uses observed two-hour SP medians, not model-derived
+# concentrations. Slopes and R2 are descriptive diagnostics of co-variation.
+gas_block_wide <- dcast(
+  block_location[response %chin% c("CO2", "CH4", "NH3")],
+  campaign + block.2h + sampling.point.numeric + height ~ response,
+  value.var = "estimate"
+)
+gas_pairs <- rbindlist(list(
+  gas_block_wide[, .(campaign, block.2h, sampling.point.numeric, height,
+                     pair = "CH4_vs_CO2", x = CO2, y = CH4)],
+  gas_block_wide[, .(campaign, block.2h, sampling.point.numeric, height,
+                     pair = "NH3_vs_CO2", x = CO2, y = NH3)],
+  gas_block_wide[, .(campaign, block.2h, sampling.point.numeric, height,
+                     pair = "NH3_vs_CH4", x = CH4, y = NH3)]
+))[is.finite(x) & x > 0 & is.finite(y) & y > 0]
+gas_coupling <- gas_pairs[, {
+  fit <- lm(log(y) ~ log(x))
+  ci <- confint(fit)[2, ]
+  .(
+    observations = .N, slope = unname(coef(fit)[2]),
+    slope.lower95 = ci[1], slope.upper95 = ci[2],
+    R2 = summary(fit)$r.squared,
+    spearman.rho = cor(x, y, method = "spearman")
+  )
+}, by = .(campaign, pair, height)]
+fwrite(gas_coupling, file.path(
+  table_dir, "Table_24_gas_coupling_by_campaign_height.csv"
+))
+
+
+###############################################################################
 ##### PLOTTING HELPERS
 ###############################################################################
 
@@ -465,13 +1010,13 @@ save_plot <- function(name, plot, width = 15, height = 15) {
 # One facet grid is used so each response row has the same y scale in both
 # campaign columns. A common pooled 0.5--99.5% display range is applied within
 # each response to prevent a few extreme values from obscuring the boxes.
-plot_limits <- long[internal == TRUE, .(
+plot_limits <- long[analysis.eligible == TRUE, .(
   display.low = quantile(value, 0.005),
   display.high = quantile(value, 0.995)
 ), by = response]
 fwrite(plot_limits, file.path(table_dir, "Table_06_plot_display_limits.csv"))
 
-long_plot <- plot_limits[long[internal == TRUE], on = "response"]
+long_plot <- plot_limits[long[analysis.eligible == TRUE], on = "response"]
 long_plot <- long_plot[value >= display.low & value <= display.high]
 
 p_box <- ggplot(long_plot,
@@ -486,7 +1031,7 @@ p_box <- ggplot(long_plot,
   ) + common_theme
 save_plot("Fig_01_boxplots_median_campaign1_2_common_ratio_scales", p_box)
 
-summary_points <- long[internal == TRUE, .(
+summary_points <- long[analysis.eligible == TRUE, .(
   mean = mean(value), median = median(value), sd = sd(value), observations = .N
 ), by = .(campaign, response, sampling.point.numeric, height)]
 summary_points <- plot_limits[summary_points, on = "response"]
@@ -641,6 +1186,165 @@ p_spatial_entropy_distribution <- ggplot(spatial_entropy_all[valid.coverage == T
   theme(legend.position = "none", axis.text.x = element_text(size = 7))
 save_plot("Fig_10_spatial_Shannon_entropy_distribution_campaign1_2",
           p_spatial_entropy_distribution, width = 11, height = 5.5)
+
+# Main observed-data figure: campaigns are stacked as rows and each campaign
+# uses the agreed 3 x 2 response arrangement. These are empirical boxplots, not
+# model-derived estimates.
+make_campaign_boxplot <- function(campaign_name) {
+  ggplot(long_plot[campaign == campaign_name],
+    aes(factor(sampling.point.numeric), value, fill = height)) +
+    geom_boxplot(outlier.shape = NA, width = 0.72, linewidth = 0.22) +
+    facet_wrap(~ response, ncol = 2, scales = "free_y",
+               labeller = as_labeller(response_labels)) +
+    scale_fill_manual(values = height_colours, name = "Height") +
+    labs(x = "Sampling point", y = "Observed concentration or ratio",
+         title = campaign_name) + common_theme +
+    theme(axis.text.x = element_text(size = 5), legend.position = "bottom")
+}
+p_observed_boxes <- make_campaign_boxplot("Campaign 1") /
+  make_campaign_boxplot("Campaign 2") +
+  plot_annotation(
+    title = "Observed gas concentrations and ratios at each sampling point",
+    subtitle = paste(
+      "Campaign 2 contains the 32 statistically eligible CRDS points;",
+      "FTIR-connected SP49 and SP51 are excluded"
+    )
+  )
+save_plot("Fig_11_observed_SP_boxplots_campaign1_2_main",
+          p_observed_boxes, width = 15, height = 18)
+
+pair_labels <- c(
+  CH4_vs_CO2 = "CH4 versus CO2",
+  NH3_vs_CO2 = "NH3 versus CO2",
+  NH3_vs_CH4 = "NH3 versus CH4"
+)
+set.seed(20260812)
+gas_pairs_plot <- gas_pairs[, if (.N > 12000L) .SD[sample(.N, 12000L)] else .SD,
+                            by = .(campaign, pair)]
+p_gas_coupling <- ggplot(gas_pairs_plot,
+  aes(x, y, colour = height)) +
+  geom_point(alpha = 0.08, size = 0.35) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, linewidth = 0.7) +
+  facet_grid(pair ~ campaign, scales = "free", labeller = labeller(
+    pair = as_labeller(pair_labels), campaign = label_value
+  )) +
+  scale_x_log10() + scale_y_log10() +
+  scale_colour_manual(values = height_colours, name = "Height") +
+  labs(
+    x = "Observed two-hour median of predictor gas (log scale)",
+    y = "Observed two-hour median of response gas (log scale)",
+    title = "Gas coupling by campaign and sampling height",
+    subtitle = "Lines describe co-variation and are not proof of complete physical mixing"
+  ) + common_theme
+save_plot("Fig_12_gas_coupling_observed_two_hour_medians",
+          p_gas_coupling, width = 12, height = 10)
+
+p_height_rep <- ggplot(c1_height_loo,
+  aes(height, absolute.percent.error, fill = height)) +
+  geom_boxplot(outlier.shape = NA, linewidth = 0.3) +
+  facet_wrap(~ response, ncol = 2, scales = "free_y",
+             labeller = as_labeller(response_labels)) +
+  scale_fill_manual(values = height_colours, guide = "none") +
+  coord_cartesian(ylim = c(0, quantile(
+    c1_height_loo$absolute.percent.error, 0.98, na.rm = TRUE
+  ))) +
+  labs(x = "Height", y = "Absolute difference from other-height median (%)",
+       title = "A  Representative height") + common_theme
+
+p_sp_rep <- ggplot(sp_composite,
+  aes(sampling.point.numeric, composite.score, colour = height)) +
+  geom_line(colour = "grey75", linewidth = 0.35) +
+  geom_point(size = 1.7) +
+  geom_point(data = sp_composite[overall.rank <= 5L |
+                                  sampling.point.numeric == 25L],
+             shape = 21, fill = "white", stroke = 0.8, size = 3) +
+  geom_text(data = sp_composite[overall.rank <= 5L |
+                                 sampling.point.numeric == 25L],
+            aes(label = sampling.point.numeric), nudge_y = 0.02,
+            size = 3, show.legend = FALSE) +
+  scale_colour_manual(values = height_colours, name = "Height") +
+  scale_x_continuous(breaks = 1:51) +
+  labs(x = "Sampling point", y = "Composite representativeness score",
+       title = "B  Representative sampling point",
+       subtitle = "Lower scores indicate closer leave-one-out network agreement") +
+  common_theme + theme(axis.text.x = element_text(size = 5))
+
+p_representative_main <- p_height_rep / p_sp_rep +
+  plot_annotation(title = "Campaign 1 representative height and sampling point")
+save_plot("Fig_13_representative_height_and_SP",
+          p_representative_main, width = 12, height = 13)
+
+configuration_order <- c(
+  "all_51", "top_bottom_34", "campaign2_like_32",
+  "top_17", "middle_17", "bottom_17"
+)
+configuration_plot <- melt(
+  configuration_result[primary.valid == TRUE],
+  id.vars = c("block.2h", "configuration"),
+  measure.vars = c("Q_vent_m3_h_LU", "e_CH4_ghLU", "e_NH3_ghLU"),
+  variable.name = "outcome", value.name = "value"
+)[is.finite(value)]
+configuration_plot[, configuration := factor(configuration,
+                                               levels = configuration_order)]
+outcome_labels <- c(
+  Q_vent_m3_h_LU = "Ventilation rate Q (m3 h-1 LU-1)",
+  e_CH4_ghLU = "CH4 emission (g h-1 LU-1)",
+  e_NH3_ghLU = "NH3 emission (g h-1 LU-1)"
+)
+p_configuration_emission <- ggplot(configuration_plot,
+  aes(configuration, value, fill = configuration)) +
+  geom_boxplot(outlier.shape = NA, linewidth = 0.3) +
+  facet_wrap(~ outcome, ncol = 1, scales = "free_y",
+             labeller = as_labeller(outcome_labels)) +
+  scale_fill_viridis_d(option = "C", guide = "none") +
+  labs(
+    x = "Sampling configuration", y = NULL,
+    title = "Campaign 1 ventilation and emissions by sampling configuration",
+    subtitle = "Primary estimates require indoor-outdoor delta CO2 >= 200 ppm"
+  ) + common_theme +
+  theme(axis.text.x = element_text(angle = 0, size = 8))
+save_plot("Fig_14_Campaign1_Q_emissions_sampling_configuration",
+          p_configuration_emission, width = 10, height = 10)
+
+density_plot <- copy(density_summary)
+density_plot[, outcome := factor(
+  outcome, levels = c("Q.abs.RE", "CH4.abs.RE", "NH3.abs.RE"),
+  labels = c("Ventilation rate Q", "CH4 emission", "NH3 emission")
+)]
+p_density <- ggplot(density_plot,
+  aes(factor(sampling.points.in.estimate), median.absolute.RE,
+      fill = outcome)) +
+  geom_boxplot(outlier.shape = NA, linewidth = 0.3) +
+  facet_wrap(~ outcome, ncol = 1, scales = "free_y") +
+  scale_fill_viridis_d(option = "D", guide = "none") +
+  labs(
+    x = "Number of sampling points (balanced three-height network)",
+    y = "Median absolute relative error versus full 51-SP network (%)",
+    title = "Effect of sampling density on ventilation and emission estimates",
+    subtitle = "One hundred fixed random networks per density; delta CO2 >= 200 ppm"
+  ) + common_theme
+save_plot("Fig_15_Campaign1_sampling_density_Q_emission_error",
+          p_density, width = 10, height = 9)
+
+p_ratio_outcome <- ggplot(ratio_outcome_correlations,
+  aes(outcome, ratio, fill = spearman.rho)) +
+  geom_tile(colour = "white", linewidth = 0.4) +
+  geom_text(aes(label = sprintf("%.2f", spearman.rho)), size = 4) +
+  scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b",
+                       midpoint = 0, limits = c(-1, 1), name = "Spearman rho") +
+  scale_x_discrete(labels = c(
+    Q_vent_m3_h_LU = "Q", e_CH4_ghLU = "CH4 emission",
+    e_NH3_ghLU = "NH3 emission"
+  )) +
+  scale_y_discrete(labels = c(
+    CH4_CO2 = "CH4/CO2", NH3_CO2 = "NH3/CO2", NH3_CH4 = "NH3/CH4"
+  )) +
+  labs(x = NULL, y = NULL,
+       title = "Relationship of gas ratios with ventilation and emissions",
+       subtitle = "Campaign 1 full 51-SP network; algebraic coupling requires cautious interpretation") +
+  common_theme
+save_plot("Fig_16_Campaign1_ratio_Q_emission_correlations",
+          p_ratio_outcome, width = 8, height = 5.5)
 
 
 ###############################################################################

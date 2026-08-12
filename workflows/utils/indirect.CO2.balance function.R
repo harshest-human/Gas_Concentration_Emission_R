@@ -48,7 +48,7 @@ indirect.CO2.balance <- function(df) {
 # The default animal constants reproduce the agreed full-occupancy scenario:
 # 58 cows, 500 kg cow-1, median milk production of 31.21864407 kg cow-1 d-1,
 # and a constant mean pregnancy day of 119.5510204 d.
-indirect.CO2.balance.std <- function(
+indirect.CO2.balance.st <- function(
         df,
         inside_suffix = "in",
         outside_suffix = "out",
@@ -61,8 +61,16 @@ indirect.CO2.balance.std <- function(
         pco2_per_hpu_m3_h = 0.185,
         assumed_pressure_pa = 101325,
         min_delta_co2_ppm = 0,
-        low_delta_co2_ppm = 200
+        low_delta_co2_ppm = 200,
+        annualisation_hours = 8760
 ) {
+        # Keep the function self-contained when this file is sourced into a
+        # clean R session; do not require callers to attach dplyr first.
+        if (!requireNamespace("dplyr", quietly = TRUE)) {
+                stop("Package 'dplyr' is required by indirect.CO2.balance.st().")
+        }
+        `%>%` <- dplyr::`%>%`
+
         required_gas_cols <- unlist(lapply(
                 c("CO2", "CH4", "NH3"),
                 function(gas) paste0(gas, "_ppm_", c(inside_suffix, outside_suffix))
@@ -73,7 +81,7 @@ indirect.CO2.balance.std <- function(
         missing_cols <- setdiff(required_cols, names(df))
         if (length(missing_cols) > 0) {
                 stop(
-                        "indirect.CO2.balance.std(): missing required column(s): ",
+                        "indirect.CO2.balance.st(): missing required column(s): ",
                         paste(missing_cols, collapse = ", ")
                 )
         }
@@ -84,6 +92,10 @@ indirect.CO2.balance.std <- function(
         if (!is.numeric(cow_weight_kg) || length(cow_weight_kg) != 1L ||
             !is.finite(cow_weight_kg) || cow_weight_kg <= 0) {
                 stop("cow_weight_kg must be one positive finite number.")
+        }
+        if (!is.numeric(annualisation_hours) || length(annualisation_hours) != 1L ||
+            !is.finite(annualisation_hours) || annualisation_hours <= 0) {
+                stop("annualisation_hours must be one positive finite number.")
         }
 
         gas_col <- function(gas, suffix) paste0(gas, "_ppm_", suffix)
@@ -174,6 +186,7 @@ indirect.CO2.balance.std <- function(
                 emission_cow_name <- paste0("e_", gas, "_gh_cow")
                 emission_lu_name <- paste0("e_", gas, "_ghLU")
                 annual_name <- paste0("e_", gas, "_kg_year_LU_rate_equivalent")
+                annual_short_name <- paste0("e_", gas, "_kg_year_LU")
                 negative_name <- paste0("delta_", tolower(gas), "_negative")
 
                 result <- result %>%
@@ -185,7 +198,14 @@ indirect.CO2.balance.std <- function(
                                         Q_vent_m3_h_barn / 1000,
                                 !!emission_cow_name := .data[[emission_name]] / n_dairy_cows,
                                 !!emission_lu_name := .data[[emission_name]] / LU_std,
-                                !!annual_name := .data[[emission_lu_name]] * 8760 / 1000
+                                # Annualised rate equivalent. This assumes the
+                                # instantaneous g h-1 LU-1 rate persists for
+                                # annualisation_hours; it is not a measured
+                                # annual integral unless representative periods
+                                # have first been weighted appropriately.
+                                !!annual_name := .data[[emission_lu_name]] *
+                                        annualisation_hours / 1000,
+                                !!annual_short_name := .data[[annual_name]]
                         )
         }
 
@@ -208,6 +228,10 @@ indirect.CO2.balance.std <- function(
 
         result
 }
+
+# Backward-compatible name retained for any existing scripts that already use
+# the earlier `.std` spelling.
+indirect.CO2.balance.std <- indirect.CO2.balance.st
 
 # Development of pivot longer function
 reshaper <- function(df) {
