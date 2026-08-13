@@ -755,6 +755,43 @@ emission_audit <- emission_result[, .(
 fwrite(emission_audit,
        file.path(table_dir, "Table_16_H2_CO2_balance_unfiltered_audit.csv"))
 
+# Manuscript-ready network summary. The hourly-scale columns are instantaneous
+# rates derived for each eligible two-hour concentration block. Annual values
+# are rate equivalents (hourly rate multiplied by 8760 h), not temporally
+# weighted annual inventories. Medians and interquartile ranges are primary
+# because the inverse delta-CO2 calculation produces right-skewed estimates.
+network_primary <- emission_result[
+  campaign == "Campaign 1" & estimate.level == "network_median" &
+    primary.valid == TRUE
+]
+emission_summary_variables <- c(
+  Q_vent_m3_h_LU = "Ventilation rate (m3 h-1 LU-1)",
+  e_CH4_ghLU = "CH4 emission (g h-1 LU-1)",
+  e_CH4_kg_year_LU = "CH4 annualised rate equivalent (kg year-1 LU-1)",
+  e_NH3_ghLU = "NH3 emission (g h-1 LU-1)",
+  e_NH3_kg_year_LU = "NH3 annualised rate equivalent (kg year-1 LU-1)"
+)
+emission_hourly_annual_summary <- rbindlist(lapply(
+  names(emission_summary_variables), function(variable) {
+    value <- network_primary[[variable]]
+    value <- value[is.finite(value)]
+    data.table(
+      metric = unname(emission_summary_variables[[variable]]),
+      valid.blocks = length(value),
+      mean = mean(value),
+      SD = sd(value),
+      median = median(value),
+      Q1 = quantile(value, 0.25),
+      Q3 = quantile(value, 0.75),
+      minimum = min(value),
+      maximum = max(value)
+    )
+  }
+))
+fwrite(emission_hourly_annual_summary, file.path(
+  table_dir, "Table_28_standard_CO2_balance_hourly_annualised_summary.csv"
+))
+
 campaign2_exclusion_audit <- unique(emission_result[
   campaign == "Campaign 2" & estimate.level == "sampling_point",
   .(sampling.point, analyser, analysis.eligible, campaign.result.role)
