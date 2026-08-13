@@ -5,9 +5,10 @@
 #   - median-based representativeness is primary;
 #   - ratios remain dimensionless (not percentages);
 #   - Campaigns 1 and 2 use common y scales within each response;
-#   - both mean +/- SD and median +/- SD are shown;
+#   - mean +/- SD is the primary descriptive interval plot;
 #   - Campaign 2 entropy is calculated for all gases and ratios;
-#   - CV and relative error are deliberately excluded.
+#   - median-based leave-one-out errors identify representative SPs;
+#   - conventional and robust CV describe temporal variability.
 #
 # This script does not read, edit, or write the LaTeX manuscript.
 ###############################################################################
@@ -31,6 +32,9 @@ output_root <- file.path(workflow, "clean_data", "manuscript3_analysis_v01")
 table_dir <- file.path(output_root, "tables")
 audit_dir <- file.path(output_root, "audit")
 plot_dir <- file.path(workflow, "plots", "manuscript3_analysis_v01")
+run_emission_analysis <- identical(
+  tolower(Sys.getenv("MANUSCRIPT3_RUN_EMISSIONS", "false")), "true"
+)
 dir.create(table_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(audit_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
@@ -121,9 +125,14 @@ fwrite(
 
 describe <- function(v) {
   v <- v[is.finite(v)]
+  centre <- median(v)
+  robust.sd <- 1.4826 * median(abs(v - centre))
   data.table(
     observations = length(v), mean = mean(v), median = median(v),
-    sd = sd(v), cv.percent = 100 * sd(v) / mean(v), mad = mad(v),
+    sd = sd(v), cv.percent = 100 * sd(v) / mean(v),
+    mad = median(abs(v - centre)),
+    robust.cv.percent = 100 * robust.sd / centre,
+    mean.minus.median.percent = 100 * (mean(v) - centre) / centre,
     minimum = min(v), q1 = quantile(v, 0.25),
     q3 = quantile(v, 0.75), maximum = max(v)
   )
@@ -388,6 +397,123 @@ fwrite(sp25_summary,
 
 
 ###############################################################################
+##### TWO-HOUR LEAVE-ONE-OUT REPRESENTATIVENESS AND TEMPORAL VARIABILITY
+###############################################################################
+
+# Each SP is compared with the median of all *other* eligible SPs observed in
+# the same two-hour block. This avoids including an SP in its own reference.
+# Blocks with at least 80% of the campaign-response maximum spatial coverage
+# enter network-level comparisons; the threshold is recorded in the audit.
+block_location <- long[analysis.eligible == TRUE, .(
+  block.median = median(value),
+  block.mean = mean(value),
+  raw.rows = .N
+), by = .(
+  campaign, response, block.2h = floor_date(DATE.TIME, "2 hours"),
+  sampling.point, sampling.point.numeric, height
+)]
+
+block_location[, locations.in.block := uniqueN(sampling.point),
+               by = .(campaign, response, block.2h)]
+block_location[, expected.locations := max(locations.in.block),
+               by = .(campaign, response)]
+block_location[, coverage.percent := 100 * locations.in.block /
+                 expected.locations]
+block_location[, valid.network.block := coverage.percent >= 80]
+
+block_location[, `:=`(
+  loo.network.median = vapply(seq_len(.N), function(i) {
+    median(block.median[-i], na.rm = TRUE)
+  }, numeric(1)),
+  loo.network.mean = vapply(seq_len(.N), function(i) {
+    mean(block.mean[-i], na.rm = TRUE)
+  }, numeric(1))
+), by = .(campaign, response, block.2h)]
+
+block_location[, `:=`(
+  signed.RE.median.percent = 100 *
+    (block.median - loo.network.median) / loo.network.median,
+  absolute.RE.median.percent = 100 *
+    abs(block.median - loo.network.median) / loo.network.median,
+  signed.RE.mean.percent = 100 *
+    (block.mean - loo.network.mean) / loo.network.mean,
+  absolute.RE.mean.percent = 100 *
+    abs(block.mean - loo.network.mean) / loo.network.mean
+)]
+
+fwrite(block_location, file.path(table_dir,
+  "Table_25_two_hour_SP_leave_one_out_data.csv"))
+
+sp_variability <- block_location[valid.network.block == TRUE, {
+  centre <- median(block.median)
+  robust.sd <- 1.4826 * median(abs(block.median - centre))
+  .(
+    two.hour.blocks = .N,
+    raw.rows = sum(raw.rows),
+    mean = mean(block.median),
+    median = centre,
+    sd = sd(block.median),
+    cv.percent = 100 * sd(block.median) / mean(block.median),
+    mad = median(abs(block.median - centre)),
+    robust.cv.percent = 100 * robust.sd / centre,
+    median.signed.RE.percent = median(signed.RE.median.percent),
+    median.absolute.RE.percent = median(absolute.RE.median.percent),
+    q90.absolute.RE.percent = quantile(absolute.RE.median.percent, 0.90),
+    within.5.percent = 100 * mean(absolute.RE.median.percent <= 5),
+    within.10.percent = 100 * mean(absolute.RE.median.percent <= 10),
+    within.20.percent = 100 * mean(absolute.RE.median.percent <= 20),
+    spearman.network = suppressWarnings(cor(
+      block.median, loo.network.median, method = "spearman",
+      use = "pairwise.complete.obs"
+    ))
+  )
+}, by = .(campaign, response, sampling.point, sampling.point.numeric, height)]
+
+sp_variability[, `:=`(
+  representative.rank = frank(
+    median.absolute.RE.percent, ties.method = "min"
+  ),
+  stable.cv.rank = frank(cv.percent, ties.method = "min"),
+  stable.robust.cv.rank = frank(robust.cv.percent, ties.method = "min")
+), by = .(campaign, response)]
+setorder(sp_variability, campaign, response, representative.rank,
+         sampling.point.numeric)
+fwrite(sp_variability, file.path(table_dir,
+  "Table_26_SP_representativeness_CV_robustCV.csv"))
+
+# Paired signed-rank contrasts test whether the blockwise SP-minus-reference
+# difference is centred on zero. Holm adjustment is applied within each
+# campaign-response family. Effect magnitude and coverage remain primary.
+sp_reference_tests <- block_location[valid.network.block == TRUE, {
+  difference <- block.median - loo.network.median
+  test <- tryCatch(
+    wilcox.test(difference, mu = 0, exact = FALSE),
+    error = function(e) NULL
+  )
+  .(
+    two.hour.blocks = .N,
+    median.difference = median(difference),
+    median.signed.RE.percent = median(signed.RE.median.percent),
+    median.absolute.RE.percent = median(absolute.RE.median.percent),
+    wilcoxon.V = if (is.null(test)) NA_real_ else unname(test$statistic),
+    p.value = if (is.null(test)) NA_real_ else test$p.value
+  )
+}, by = .(campaign, response, sampling.point, sampling.point.numeric, height)]
+sp_reference_tests[, p.holm := p.adjust(p.value, method = "holm"),
+                   by = .(campaign, response)]
+sp_reference_tests[, significantly.different := p.holm < 0.05]
+fwrite(sp_reference_tests, file.path(table_dir,
+  "Table_27_paired_SP_vs_leave_one_out_network_tests.csv"))
+
+block_coverage_audit <- unique(block_location[, .(
+  campaign, response, block.2h, locations.in.block, expected.locations,
+  coverage.percent, valid.network.block
+)])
+fwrite(block_coverage_audit, file.path(audit_dir,
+  "two_hour_network_coverage.csv"))
+
+
+###############################################################################
 ##### SHANNON ENTROPY: CONCENTRATIONS AND RATIOS
 ###############################################################################
 
@@ -461,6 +587,8 @@ fwrite(entropy_summary, file.path(table_dir,
 ###############################################################################
 ##### STANDARD CO2-BALANCE VENTILATION AND EMISSION ESTIMATES
 ###############################################################################
+
+if (run_emission_analysis) {
 
 # Every aligned row is retained. Invalid or unavailable calculations remain in
 # the CSV with the function's validity flags and NA estimates; no subsequent
@@ -857,6 +985,8 @@ fwrite(ratio_outcome_correlations, file.path(
   table_dir, "Table_20_Campaign1_ratio_ventilation_emission_correlations.csv"
 ))
 
+} # end optional emission-analysis module
+
 
 ###############################################################################
 ##### REPRESENTATIVE HEIGHT/SP AND GAS-COUPLING DIAGNOSTICS
@@ -1054,6 +1184,68 @@ p_mean_sd <- ggplot(summary_points,
        title = "Mean and standard deviation by sampling point",
        subtitle = "SD bars clipped only for display to the common pooled response range") + common_theme
 save_plot("Fig_02_mean_plus_minus_SD_campaign1_2", p_mean_sd)
+
+# Signed relative error is centred at zero. Absolute relative error, CV and
+# robust CV are displayed separately because they answer different questions:
+# representativeness versus temporal variability.
+heatmap_data <- melt(
+  sp_variability,
+  id.vars = c("campaign", "response", "sampling.point.numeric", "height"),
+  measure.vars = c(
+    "median.signed.RE.percent", "median.absolute.RE.percent",
+    "cv.percent", "robust.cv.percent"
+  ),
+  variable.name = "metric", value.name = "percent"
+)
+heatmap_data[, metric := factor(metric, levels = c(
+  "median.signed.RE.percent", "median.absolute.RE.percent",
+  "cv.percent", "robust.cv.percent"
+), labels = c(
+  "Median signed RE", "Median absolute RE", "CV", "Robust CV"
+))]
+
+p_signed_re <- ggplot(
+  heatmap_data[metric == "Median signed RE"],
+  aes(factor(sampling.point.numeric), response,
+      fill = pmax(-100, pmin(percent, 100)))
+) +
+  geom_tile(colour = "white", linewidth = 0.18) +
+  facet_grid(campaign ~ ., labeller = facet_labels) +
+  scale_fill_gradient2(
+    low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0,
+    limits = c(-100, 100), name = "% (display capped)"
+  ) +
+  scale_y_discrete(labels = response_labels) +
+  labs(
+    x = "Sampling point", y = NULL,
+    title = "Median signed relative error against the two-hour leave-one-out network median"
+  ) + common_theme
+save_plot("Fig_17_median_signed_RE_heatmap_campaign1_2", p_signed_re,
+          width = 14, height = 7)
+
+p_variability_heatmap <- ggplot(
+  heatmap_data[metric != "Median signed RE"],
+  aes(factor(sampling.point.numeric), response,
+      fill = pmin(percent, 100))
+) +
+  geom_tile(colour = "white", linewidth = 0.18) +
+  facet_grid(metric ~ campaign, scales = "free_x", labeller = facet_labels) +
+  scale_fill_gradientn(
+    colours = c("#2166AC", "#67A9CF", "#A6D96A", "#FEE08B",
+                "#F46D43", "#B2182B"),
+    limits = c(0, 100), name = "% (display capped)"
+  ) +
+  scale_y_discrete(labels = response_labels) +
+  labs(
+    x = "Sampling point", y = NULL,
+    title = "Sampling-point representativeness and temporal variability",
+    subtitle = paste(
+      "Absolute RE uses two-hour leave-one-out network medians;",
+      "CV and robust CV describe temporal variability; display capped at 100%"
+    )
+  ) + common_theme
+save_plot("Fig_18_absolute_RE_CV_robustCV_heatmaps_campaign1_2",
+          p_variability_heatmap, width = 15, height = 11)
 
 p_median_sd <- ggplot(summary_points,
   aes(sampling.point.numeric, median, colour = height)) +
@@ -1274,6 +1466,8 @@ p_representative_main <- p_height_rep / p_sp_rep +
 save_plot("Fig_13_representative_height_and_SP",
           p_representative_main, width = 12, height = 13)
 
+if (run_emission_analysis) {
+
 configuration_order <- c(
   "all_51", "top_bottom_34", "campaign2_like_32",
   "top_17", "middle_17", "bottom_17"
@@ -1346,6 +1540,8 @@ p_ratio_outcome <- ggplot(ratio_outcome_correlations,
 save_plot("Fig_16_Campaign1_ratio_Q_emission_correlations",
           p_ratio_outcome, width = 8, height = 5.5)
 
+} # end optional emission plots
+
 
 ###############################################################################
 ##### AUDIT
@@ -1357,7 +1553,7 @@ audit <- data.table(
     "primary_representativeness", "ratio_units", "ratio_scale",
     "variability_display", "plot_display_range", "entropy_inputs",
     "spatial_entropy", "temporal_entropy",
-    "excluded_metrics"
+    "network_reference", "network_coverage", "emission_module"
   ),
   definition = c(
     "sampling.point", "in is standardised to ring_in",
@@ -1365,12 +1561,14 @@ audit <- data.table(
     "hourly sampling-point median compared with equally weighted hourly network median",
     "dimensionless; not multiplied by 100",
     "shared within each response across Campaigns 1 and 2",
-    "mean +/- SD and median +/- SD are both reported",
+    "mean +/- SD is the primary descriptive interval plot",
     "pooled 0.5-99.5% range per response; full values retained in tables",
     "two-hour sampling-point medians for CO2, CH4, NH3 and three ratios",
     "normalised across sampling points within aligned two-hour blocks using log(N)",
     "normalised across time using common pooled campaign-response bins",
-    "CV and relative error are not calculated or plotted in this version"
+    "two-hour leave-one-out network median; median signed and absolute RE",
+    "network-level comparisons require at least 80% of expected SPs",
+    if (run_emission_analysis) "enabled" else "disabled; set MANUSCRIPT3_RUN_EMISSIONS=true to run"
   )
 )
 fwrite(audit, file.path(audit_dir, "analysis_decisions.csv"))

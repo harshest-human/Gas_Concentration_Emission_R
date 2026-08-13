@@ -37,6 +37,10 @@ SD & standard deviation\\
 SP & sampling point\\ \bottomrule
 \end{tabular}
 
+% The previous Introduction and Materials and methods are retained temporarily
+% below for version-control comparison but excluded from compilation. The
+% evidence-led rewrite is maintained in the manuscript knowledge base.
+\iffalse
 \section{Introduction}
 Emission estimates for naturally ventilated livestock buildings depend jointly on airflow and the concentration field sampled across that airflow. Wind, buoyancy, animals, manure surfaces and internal obstructions produce spatially variable transport, so analytical accuracy alone does not ensure spatial representativeness \citep{Calvet2013,Ogink2013}. Direct wind-tunnel measurements demonstrated that combining concentration and velocity at one constant height could produce emission errors up to 97\%, whereas vertically resolved sampling reduced the error to below 5\% in the tested cases \citep{Janke2020}. A concentration sensor should therefore be evaluated at the spatial and temporal resolution at which it will be used.
 
@@ -90,6 +94,9 @@ Shannon entropy was calculated after discretising each response into four equipr
 Representative heights were evaluated in complete Campaign~1 two-hour blocks by comparing the median at each height with the median of the other two heights. Candidate SPs were ranked by leave-one-SP-out agreement with the contemporaneous median of the remaining network, combining normalised median absolute error and Spearman correlation across the three concentrations and three ratios. SP25 was retained as a pragmatic central comparator, while the ranking was allowed to identify a different statistical optimum.
 
 For an emission-sensitivity analysis, the standard-input indirect \(\mathrm{CO_2}\)-balance function was applied to matched Campaign~1 blocks. The 51-SP network was the reference. Alternative estimates used each 17-point height, the 34-point top-and-bottom network, and a 32-point network matching the Campaign~2 coverage. Balanced density experiments retained all three heights at randomly selected horizontal positions (3, 6, 12, 24, 36 or 51 SPs; 100 fixed networks per density). Only missing, non-positive or otherwise undefined results were excluded from their respective calculations. Because an inverse \(\Delta\mathrm{CO_2}\) balance becomes unstable as the indoor--outdoor difference approaches zero, estimates with \(\Delta\mathrm{CO_2}\geq\SI{200}{ppm}\) formed the primary analysis; \(70\)--\(199\) ppm was retained as a sensitivity band and values below \SI{70}{ppm} were flagged as unreliable rather than deleted from the processed data. The \SI{200}{ppm} rule is deliberately conservative and reflects published limitations of short-period \(\mathrm{CO_2}\)-balance calculations \citep{Pedersen2008}. The calculated rates are standard-input equivalents used to compare spatial configurations, not definitive whole-barn flux measurements, because matching opening velocities were unavailable.
+
+\fi
+\input{../knowledge_base/06_drafts/20260813_introduction_methods_v01.tex}
 
 \section{Results}
 \subsection{Gas-specific precision across temporal resolutions}

@@ -1,0 +1,149 @@
+% !TEX program = pdflatex
+% Evidence-led staging draft. Statistics, Results, Discussion and Conclusions
+% are deliberately outside this version.
+
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx,booktabs,array,amsmath,siunitx,natbib,caption,subcaption,placeins,setspace,lineno,url,rotating}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{../figures/}}
+\sisetup{separate-uncertainty=true,per-mode=symbol,range-phrase={--},range-units=single}
+\onehalfspacing
+\linenumbers
+
+\title{Spatio-temporal heterogeneity of gas concentrations and its propagation into ventilation and emission estimates in a naturally ventilated dairy barn}
+\author{Harsh Sahu$^{a,b}$, Long Chen$^{a}$, Thomas Amon$^{a,b}$, David Janke$^{a,*}$}
+\date{}
+
+\begin{document}
+\maketitle
+\begin{center}\small
+$^{a}$Leibniz Institute for Agricultural Engineering and Bioeconomy (ATB), Max-Eyth-Allee 100, 14469 Potsdam, Germany\\
+$^{b}$Institute of Animal Hygiene and Environmental Health, Department of Veterinary Medicine, Freie Universit\"at Berlin, Germany\\
+$^{*}$Corresponding author: \href{mailto:djanke@atb-potsdam.de}{djanke@atb-potsdam.de}
+\end{center}
+
+\section{Introduction}
+
+Dairy housing is an important source of methane (\(\mathrm{CH_4}\)) and ammonia (\(\mathrm{NH_3}\)), and reliable barn-scale measurements are needed to evaluate mitigation measures and compile emission inventories. Naturally ventilated dairy barns are widely used because large wall and ridge openings provide fresh air without the continuous energy demand of mechanically driven ventilation. The same openness makes these buildings unusually difficult measurement systems. Wind direction and speed, buoyancy, roof geometry, animals, manure surfaces and internal obstructions continuously redistribute both air and gases. Openings can alternate between inlet and outlet behaviour, and the concentration sampled at one position may therefore not represent either the average barn air or the air mass carrying pollutants out of the building \citep{Calvet2013,Ogink2013,Saha2013}.
+
+This spatial problem affects direct and indirect emission methods differently but cannot be avoided by either. Direct methods require concentration and velocity to be resolved over the effective outlet area. In a scaled naturally ventilated building, a constant-height concentration configuration produced emission errors as large as 97\%, whereas vertically resolved concentration sampling reduced the error to below 5\% for the investigated cases \citep{Janke2020}. Indirect tracer or \(\mathrm{CO_2}\)-balance methods avoid direct integration of opening velocity, but they require representative indoor and outdoor concentrations. Error in the indoor \(\mathrm{CO_2}\) concentration propagates into the calculated ventilation rate, and spatial error in the pollutant concentration subsequently propagates into the calculated emission. Consequently, analytical accuracy and calibration are necessary but insufficient: the sampled air must also be spatially representative.
+
+Previous work has examined complementary parts of this problem. Opening- and wind-oriented field studies showed that external wind and the selection of indoor and outdoor sampling positions affected measured concentrations, air exchange and calculated emissions \citep{Saha2013,Koenig2018,JankeSampling2020}. Horizontal mapping in an open-sided dairy barn used 11 locations at 0.2 m above the floor and showed that location, number and spacing influenced the estimated concentrations; the authors compared one-, two- and three-location subsets with four-location area means using one-way analysis of variance and Tukey comparisons \citep{Durso2022}. In a naturally ventilated animal mock-up, De Vogeleer et al. demonstrated that the spatial arrangement of sampling points could be as consequential as their number, although transfer from an unoccupied mock-up to a full-scale barn with biological heat and gas sources remains uncertain \citep{DeVogeleer2017}. These studies establish that horizontal replication matters, but they do not describe a barn-wide three-dimensional concentration field.
+
+Vertical studies likewise show that one universal sampling height cannot be assumed. Mendes et al. sampled \(\mathrm{NH_3}\), metabolically produced \(\mathrm{CO_2}\) and injected \(\mathrm{SF_6}\) at 1, 2, 3 and 4 m near an inlet and an outlet. Two-way analysis of variance followed by Tukey--Kramer comparisons indicated that concentrations and pollutant-to-tracer ratios became more stable above the animal-occupied zone under the tested conditions \citep{Mendes2015}. D'Urso et al. measured \(\mathrm{NH_3}\), \(\mathrm{CH_4}\) and \(\mathrm{CO_2}\) at three heights in an open Mediterranean barn and used one-way analysis of variance, Tukey comparisons, Pearson correlations and regressions to demonstrate gas-specific vertical behaviour \citep{Durso2024}. At a building outlet, Sahu et al. found significant concentration gradients across vertically distributed sampling points \citep{Sahu2023}. Conversely, a parametric CFD study showed that the commonly recommended height of at least 3 m only rarely coincided with a perfect pollutant-to-tracer mixing ratio; the most representative height depended on convection regime and inflow direction \citep{Doumbia2021}. Thus, a convenient height may be representative for one gas or flow regime without being representative for another.
+
+Measurements close to animals address a different spatial scale. Wu et al. placed nine sampling locations at 0.3 m around two lying cubicles and a barn-background location at 3.5 m. Hourly \(\mathrm{CH_4}\) concentrations around the cubicles had spatial coefficients of variation of 71\% in summer and 58\% in winter, while temporal coefficients of variation were still larger at several locations; airflow, cow occupancy and barn management were identified as important drivers \citep{Wu2016}. Airflow and \(\mathrm{CO_2}\) measurements at 1.5 and 2.6 m also showed that only part of a windward opening necessarily benefited from the approaching wind and that the association between wind speed and \(\mathrm{CO_2}\) was not adequately represented by a simple linear relationship \citep{Fiedler2014}. Near-source studies are therefore indispensable for understanding animal and manure microenvironments, but they answer a different question from whether the accessible upper barn airspace provides a representative concentration for whole-building measurements.
+
+Gas ratios provide an additional test of spatial coherence. If two gases experience identical source-to-sensor transport and dilution, their ratio should be more stable than either concentration alone. Mendes et al. showed that stable ratios can occur even when the individual gases are not homogeneously distributed, provided that pollutant and tracer dispersion patterns remain sufficiently similar \citep{Mendes2015}. However, \(\mathrm{CO_2}\), \(\mathrm{CH_4}\) and \(\mathrm{NH_3}\) have overlapping but non-identical sources and removal processes. Respiration and enteric release are coupled to animal position and activity, whereas \(\mathrm{NH_3}\) is strongly affected by manure surfaces, temperature, air movement and deposition. Spatial variation in \(\mathrm{NH_3}/\mathrm{CO_2}\), \(\mathrm{CH_4}/\mathrm{CO_2}\) or \(\mathrm{NH_3}/\mathrm{CH_4}\) can therefore reveal divergence that is concealed by common ventilation-driven concentration changes.
+
+The existing literature is consequently rich but spatially fragmented. Studies have concentrated on particular openings, horizontal transects, a small number of vertical levels, near-cubicle microenvironments, sampling-line strategies, mock-ups or numerical flow fields. Dense measurements combining extensive horizontal coverage, conventional upper-air sampling and uncommon near-roof positions over an occupied barn and changing seasonal conditions remain scarce.
+
+The aim of this study was to characterise the spatial structure of \(\mathrm{CO_2}\), \(\mathrm{CH_4}\), \(\mathrm{NH_3}\) and their ratios inside a naturally ventilated dairy barn using 51 sampling points arranged as 17 horizontal positions and three vertical levels. The hypothesis was that gas concentrations and gas ratios exhibit systematic spatial structure with sampling height and horizontal position inside the barn. Consequences of spatial coverage, vertical coverage, density and temporal aggregation for representative concentrations and indirect \(\mathrm{CO_2}\)-balance based ventilationa nd emission calculations were also evaluated. The results provide a basis for practical sampling recommendations and for the design of future experiments that require representative barn-scale concentrations.
+
+\section{Materials and methods}
+
+\subsection{Experimental barn and surroundings}
+
+Measurements were conducted at the experimental naturally ventilated dairy barn of the Lehr- und Versuchsanstalt f\"ur Tierzucht und Tierhaltung in Gross Kreutz, Brandenburg, Germany. The facility forms part of the Leibniz Innovation Centre for Sustainable Bioeconomy and is coordinated by the Leibniz Institute for Agricultural Engineering and Bioeconomy. The investigated loose-housing barn was designed for 58 dairy cows and measured \SI{38.88}{m} by \SI{17.65}{m}. Its asymmetrical fibre-cement roof reached \SI{6.20}{m} at the ridge and approximately \SI{3.60}{m} at the sidewalls; the internal air volume was approximately \SI{4529}{m^3}.
+
+The barn contained littered lying cubicles, solid concrete walking and feeding alleys, an automated milking area and a small slatted-floor section. The western alley was cleaned by an automatic manure scraper and the eastern alley by a cleaning robot. The southern gable incorporated the milking-robot room and adjoining structures, whereas gates in the northern gable connected the barn with an exercise yard. The surroundings included open land, manure storage, feed storage and other livestock buildings. These structures were relevant because their wakes and intermittent plumes could modify the approach flow and background concentrations.
+
+Natural ventilation through the wall and ridge openings was the principal ventilation mechanism. Internal circulation fans and an experimental cooling and air-distribution system were present during parts of Campaign~1, but their complete operating history was unavailable; they were therefore treated as contextual features rather than controlled experimental factors. Manure removal, bedding, feeding, cow movement, fan operation and water spraying could generate short-term changes in sources or transport. The sampling network consequently covered the principal functional zones rather than being restricted to a geometrically uniform grid.
+
+\subsection{Spatial sampling design}
+
+Fifty-one individual polytetrafluoroethylene sampling lines were installed inside the barn. Each line endpoint is termed a sampling point (SP). Seventeen horizontal positions covered lying-cubicle rows, feeding and walking areas, manure-handling zones, the vicinity of the milking installation and the open central barn airspace (Fig.~\ref{fig:layout}). Three vertically aligned SPs were installed at each horizontal position. The top SP was located \SI{0.60}{m} below the local sloping roof, the middle SP was \SI{3.60}{m} above the floor and the bottom SP was \SI{2.60}{m} above the floor. The top layer therefore followed roof elevation rather than representing one absolute height. The bottom height was the lowest practicable installation that protected tubes from cattle and retained clearance for tractors and routine barn operations. The middle layer represented the commonly accessible upper barn airspace, while the near-roof layer deliberately examined a region rarely resolved in occupied-barn field measurements.
+
+SPs were numbered as vertical triplets. At each horizontal position, the first number denoted the top, the second the middle and the third the bottom SP. Hence, top SPs were 1, 4, 7, \ldots, 49; middle SPs were 2, 5, 8, \ldots, 50; and bottom SPs were 3, 6, 9, \ldots, 51. A separate sampling line was positioned outside the south-western side of the barn to characterise background concentrations. It was retained as `out' and was not treated as an internal SP.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}[t]{0.99\textwidth}\centering
+\includegraphics[width=\linewidth]{Fig1a_campaign1_sampling_layout_no_ringline.png}
+\caption{Plan view and 51 internal SPs.}
+\end{subfigure}
+\begin{subfigure}[t]{0.83\textwidth}\centering
+\includegraphics[width=\linewidth]{Fig1b_barn_cross_section.png}
+\caption{Vertical arrangement of the sampling lines.}
+\end{subfigure}
+\caption{Experimental barn and dense Campaign~1 sampling design. Numbers are arranged in vertical triplets (top, middle and bottom). Functional zones and internal circulation fans are shown to support physical interpretation of the concentration field.}
+\label{fig:layout}
+\end{figure}
+
+\subsection{Gas analysers and multiplexer allocation}
+
+Gas concentrations were measured with two Fourier-transform infrared spectrometers (FTIR1 and FTIR2; Gasmet CX4000, Gasmet Technologies Oy, Finland) and two cavity ring-down spectrometers (CRDS8 and CRDS9; Picarro G2508 and G2509, Picarro Inc., USA). The analysers quantified \(\mathrm{CO_2}\), \(\mathrm{CH_4}\), \(\mathrm{NH_3}\) and water vapour. The CRDS instruments were each coupled to a 16-port multiposition valve; the FTIR instruments were connected to their respective multiplexed sampling channels. During Campaign~1, the 51 internal lines were divided among the four analysers: CRDS9 measured SP1--SP16, FTIR2 SP17--SP26, CRDS8 SP27--SP42 and FTIR1 SP43--SP51. The outside line was measured by FTIR1. An analyser-to-SP allocation table is provided in the Supplementary material so that spatial patterns can be audited for possible analyser assignment effects.
+
+\subsection{Sampling sequence and temporal alignment}
+
+The target residence time at each valve position was \SI{240}{s}. FTIR observations were exported as one value per sampling step. CRDS instruments recorded approximately one observation per second. For CRDS data, the first \SI{60}{s} following a valve change were discarded digitally to represent line flushing, and the remaining \SI{180}{s} were averaged. Each resulting record was stamped at the end of the sampling step. The cleaned analyser tables were then harmonised to the columns date--time, analyser, sampling port, SP, \(\mathrm{CO_2}\), \(\mathrm{CH_4}\), \(\mathrm{NH_3}\) and \(\mathrm{H_2O}\), and were appended row-wise.
+
+Because four instruments sampled different parts of the network in parallel but each instrument switched sequentially among its assigned lines, the 51-point field was not observed instantaneously. A complete traversal of the analyser allocations lasted less than two hours. Two-hour blocks were therefore used when a contemporaneous whole-network summary was required. This blocking limits, but cannot eliminate, confounding between spatial differences and short-term changes in wind, animal activity or management.
+
+\subsection{Campaigns}
+
+Campaign~1 was the primary high-density experiment. Measurements covered summer 2024 and an autumn period from 1 to 24 October 2024. The two CRDS and two FTIR analysers were used to obtain the complete 51-SP configuration. Campaign~2 covered 16 November to 31 December 2024. Technical defects in the FTIR instruments prevented continuation of the four-analyser network. The sampling configuration was therefore adapted to the 32 available CRDS ports. Middle SPs were removed and the remaining top and bottom lines, including SP19 and SP40, were reassigned sequentially to CRDS8 and CRDS9. Sparse FTIR observations at SP49 and SP51 were preserved in the data archive but were not considered part of the inferential Campaign~2 network. Campaign~2 was thus a pragmatic seasonal extension, not an independent replication of the 51-SP experiment or a prior demonstration that the middle layer was redundant.
+
+\subsection{Instrument comparability and quality assurance}
+
+Before Campaign~1, all four analysers were operated for 24 h at a common position in the centre of the barn. Two PTFE lines terminated at the same suction location; one line was divided between the CRDS instruments and the other between the FTIR instruments. Relative to CRDS, the FTIR instruments reported concentrations approximately 6\% higher for \(\mathrm{CO_2}\) and \(\mathrm{CH_4}\), and 9\% higher for \(\mathrm{NH_3}\). Campaign~1 FTIR concentrations were therefore harmonised to the CRDS scale using 1.06 correction factors for \(\mathrm{CO_2}\), \(\mathrm{CH_4}\) and 1.09 \(\mathrm{NH_3}\). Before and after the field deployment, the analysers were additionally tested with nominal test-gas concentrations of \SI{700}{ppm} \(\mathrm{CO_2}\), \SI{7}{ppm} \(\mathrm{CH_4}\) and \SI{5}{ppm} \(\mathrm{NH_3}\). These test cylinder checks were treated as analyser accuracy checks.
+
+\subsection{Meteorological context}
+
+Hourly air temperature, relative humidity, precipitation, wind speed and wind direction were obtained from the German Meteorological Service for the nearest suitable station and aligned with the concentration records. These data described the seasonal and synoptic context of the two campaigns. They were not interpreted as direct measurements of velocity or flow direction at the barn openings. Consequently, meteorological comparisons were used to support interpretation of changing dispersion conditions, not to assign individual SP differences to a unique ventilation pathway.
+
+\subsection{Analysis framework}
+
+The analysis was organised around the single spatial-structure hypothesis. Concentrations and the dimensionless ratios \(\mathrm{CH_4}/\mathrm{CO_2}\), \(\mathrm{NH_3}/\mathrm{CO_2}\) and \(\mathrm{NH_3}/\mathrm{CH_4}\) were compared across height, horizontal position and time. Missing, zero and negative concentrations were excluded response-wise; no lower threshold was imposed on positive \(\mathrm{CO_2}\) observations. No observations were removed using a 1.5-interquartile-range rule or other statistical outlier filter. Arithmetic means and standard deviations described concentration magnitude and temporal dispersion, whereas medians and median absolute deviations provided robust summaries for the skewed distributions.
+
+Clock-aligned two-hour blocks were used as the inferential unit. A sampling-point median was calculated within each block. Network-level analyses required at least 80\% of the maximum number of eligible SPs observed for the respective campaign and response. The reference for SP~\(i\) was the median of all other eligible SPs within the same block, thereby preventing the evaluated SP from contributing to its own reference. Signed relative error, absolute relative error, conventional coefficient of variation (CV), robust CV, and Spearman correlation with the leave-one-out reference were calculated for every SP. The robust CV was defined as \(100(1.4826\,\mathrm{MAD})/\mathrm{median}\). Paired Wilcoxon signed-rank tests evaluated whether blockwise SP-minus-reference differences were centred on zero; multiplicity was controlled within each campaign and response using the Holm procedure. Effect magnitude, rather than significance alone, was used to rank representative SPs.
+
+Vertical effects were evaluated using linear mixed-effects models fitted to log-transformed two-hour medians. Height was included as a fixed effect, horizontal position as an adjustment factor and two-hour block as a random intercept. Campaign~1 models compared top, middle and bottom levels; Campaign~2 models compared top and bottom levels. Estimated marginal means were back-transformed to the response scale. Holm-adjusted height contrasts were expressed as ratios with 95\% confidence intervals. Temporal variability was also summarised at two-hour, daily, weekly and campaign scales. Spatial Shannon entropy was normalised by \(\ln(n)\) within each two-hour block. Temporal entropy was calculated for each SP using common bins within each campaign and response. Entropy was interpreted as information distribution, not as direct proof of airflow or physical mixing. Principal-component analysis and hierarchical pattern diagnostics were used as complementary exploratory analyses.
+
+\section{Results}
+
+\subsection{Data coverage and temporal aggregation}
+
+Campaign~1 provided valid positive observations from all four analysers at all 51 internal SPs. For each gas, approximately 30,181 CRDS9, 33,950 CRDS8, 39,861 FTIR1 and 40,018 FTIR2 observations were available after response-wise validity checks; the corresponding FTIR1 count for \(\mathrm{NH_3}\) was 39,277. The two-hour aggregation yielded 1,338 candidate blocks. Of these, 1,010 blocks met the 80\% spatial-coverage requirement for every concentration and ratio response, and the median valid block contained all 51 SPs.
+
+Campaign~2 contributed 16,566 valid positive observations per gas from CRDS9 and 4,068 from CRDS8. The inferential network comprised 32 CRDS-connected top and bottom SPs, including SP19 and SP40. Of 552 candidate two-hour blocks, 136 met the 80\% coverage requirement. The median candidate block contained 16 SPs because the two CRDS sampling cycles were not always contemporaneously complete, whereas accepted blocks contained at least 26 of the 32 expected SPs. The sparse Campaign~2 FTIR2 records were retained in the archive but excluded from inference.
+
+\subsection{Concentration distributions across sampling points}
+
+The concentration distributions were right-skewed, with the extent of skewness differing among gases and ratios. Across SPs, the median absolute difference between the mean and median of the two-hour summaries was approximately 1.1\% for \(\mathrm{CO_2}\) in both campaigns. It was 1.7 and 3.6\% for \(\mathrm{CH_4}\), and 4.0 and 3.9\% for \(\mathrm{NH_3}\), in Campaigns~1 and 2, respectively. The largest mean--median separation occurred for \(\mathrm{NH_3}/\mathrm{CH_4}\), for which the corresponding median differences were 9.4 and 8.2\%. Nevertheless, mean- and median-based SP rankings were strongly associated (Spearman \(\rho=0.955\)--0.995 across responses and campaigns). Mean~\(\pm\)~SD was therefore retained for descriptive presentation, whereas median-based errors were used to evaluate typical representativeness.
+
+In Campaign~1, the mean two-hour concentrations at the top, middle and bottom levels were 628.8, 621.2 and 616.5~ppm for \(\mathrm{CO_2}\); 19.23, 18.78 and 18.44~ppm for \(\mathrm{CH_4}\); and 1.99, 1.97 and 1.92~ppm for \(\mathrm{NH_3}\), respectively. Campaign~2 top and bottom means were 643.8 and 620.3~ppm for \(\mathrm{CO_2}\), 18.97 and 17.08~ppm for \(\mathrm{CH_4}\), and 0.99 and 0.80~ppm for \(\mathrm{NH_3}\). The SDs were large relative to the means, especially for \(\mathrm{CH_4}\) and \(\mathrm{NH_3}\), demonstrating substantial temporal dispersion within every height group.
+
+\subsection{Vertical concentration structure}
+
+All planned height contrasts were significant after multiplicity adjustment. In Campaign~1, the estimated top-to-bottom ratios were 1.017 (95\% CI 1.015--1.019) for \(\mathrm{CO_2}\), 1.031 (1.026--1.036) for \(\mathrm{CH_4}\), and 1.045 (1.039--1.051) for \(\mathrm{NH_3}\). The top level was also higher than the middle level, with ratios of 1.010, 1.013 and 1.013, respectively. Middle-to-bottom ratios were 1.007 for \(\mathrm{CO_2}\), 1.017 for \(\mathrm{CH_4}\), and 1.032 for \(\mathrm{NH_3}\). Thus, the estimated ordering was top~\(>\)~middle~\(>\)~bottom for all three gases, although the proportional separation was gas-specific.
+
+The top--bottom contrasts were larger in Campaign~2. Estimated ratios were 1.033 (95\% CI 1.031--1.036) for \(\mathrm{CO_2}\), 1.074 (1.064--1.084) for \(\mathrm{CH_4}\), and 1.228 (1.219--1.237) for \(\mathrm{NH_3}\). The largest vertical separation was therefore consistently observed for \(\mathrm{NH_3}\), followed by \(\mathrm{CH_4}\) and \(\mathrm{CO_2}\).
+
+\subsection{Temporal variability and aggregation scale}
+
+Spatial variability decreased as observations were aggregated over longer periods, but the extent of attenuation differed by gas. In Campaign~1, the median robust CV across SPs decreased from 7.6\% at the two-hour scale to 3.3\% at the campaign scale for \(\mathrm{CO_2}\), from 17.3 to 6.5\% for \(\mathrm{CH_4}\), and from 23.3 to 15.6\% for \(\mathrm{NH_3}\). In Campaign~2, the corresponding reductions were from 7.1 to 5.5\%, from 22.5 to 16.6\%, and from 24.4 to 23.0\%, respectively. The median spatial range also remained gas-specific. At the two-hour scale it was approximately 31.2, 78.3 and 105.6\% for \(\mathrm{CO_2}\), \(\mathrm{CH_4}\) and \(\mathrm{NH_3}\) in Campaign~1, and 25.1, 82.2 and 93.5\% in Campaign~2.
+
+Conventional and robust CVs were broadly similar for many SPs but diverged at locations affected by episodic peaks or small ratio denominators. Consequently, CV alone did not identify whether a location was representative of the network: some low-CV SPs retained systematic signed errors, while some more variable SPs closely followed the contemporaneous network series.
+
+\subsection{Sampling-point representativeness}
+
+The SP with the smallest median absolute leave-one-out error depended on the response. In Campaign~1, the three closest SPs were SP14, SP2 and SP25 for \(\mathrm{CO_2}\); SP26, SP25 and SP17 for \(\mathrm{CH_4}\); and SP17, SP26 and SP18 for \(\mathrm{NH_3}\). For the ratios, SP26, SP25 and SP17 ranked highest for \(\mathrm{CH_4}/\mathrm{CO_2}\); SP26, SP17 and SP18 for \(\mathrm{NH_3}/\mathrm{CO_2}\); and SP25, SP26 and SP17 for \(\mathrm{NH_3}/\mathrm{CH_4}\). SP25 was therefore among the three closest locations for four of the six responses but was not universally optimal.
+
+Median absolute relative errors for the best Campaign~1 SPs were approximately 4.1\% for \(\mathrm{CO_2}\), 8.0\% for \(\mathrm{CH_4}\), 6.7\% for \(\mathrm{NH_3}\), 5.3\% for \(\mathrm{CH_4}/\mathrm{CO_2}\), 6.4\% for \(\mathrm{NH_3}/\mathrm{CO_2}\), and 8.1\% for \(\mathrm{NH_3}/\mathrm{CH_4}\). In Campaign~2, minimum median absolute errors were 3.4\% for \(\mathrm{CO_2}\), 11.0\% for \(\mathrm{CH_4}\), 6.9\% for \(\mathrm{NH_3}\), 7.4\% for \(\mathrm{CH_4}/\mathrm{CO_2}\), 6.4\% for \(\mathrm{NH_3}/\mathrm{CO_2}\), and 11.9\% for \(\mathrm{NH_3}/\mathrm{CH_4}\). The identity of the highest-ranking Campaign~2 SP also varied by response.
+
+After Holm adjustment, 48 of 51 Campaign~1 SPs differed from the leave-one-out reference for \(\mathrm{CO_2}\), 42 for \(\mathrm{CH_4}\), 46 for \(\mathrm{NH_3}\), 39 for \(\mathrm{CH_4}/\mathrm{CO_2}\), 50 for \(\mathrm{NH_3}/\mathrm{CO_2}\), and 47 for \(\mathrm{NH_3}/\mathrm{CH_4}\). Campaign~2 counts were 20, 21, 31, 22, 31 and 27 of 32 SPs, respectively. Given the large number of repeated blocks, these tests had high power; the magnitude and direction of the leave-one-out errors provided the principal ranking information.
+
+\subsection{Spatial and temporal entropy}
+
+Normalised spatial entropy was close to one for all responses, but small systematic differences were resolved. Median values in Campaign~1 were 0.999 for \(\mathrm{CO_2}\), 0.996 for \(\mathrm{CH_4}\), 0.991 for \(\mathrm{NH_3}\), 0.998 for \(\mathrm{CH_4}/\mathrm{CO_2}\), 0.993 for \(\mathrm{NH_3}/\mathrm{CO_2}\), and 0.990 for \(\mathrm{NH_3}/\mathrm{CH_4}\). Campaign~2 values were 0.999, 0.989, 0.988, 0.994, 0.989 and 0.984, respectively. The associated median information deficit was smallest for \(\mathrm{CO_2}\) and largest for \(\mathrm{NH_3}/\mathrm{CH_4}\) in both campaigns.
+
+Temporal entropy varied more strongly among individual SPs than spatial entropy varied among complete blocks. Low temporal-entropy values were concentrated at a small number of SPs, but their identity was response- and campaign-specific. For example, SP40 had the lowest Campaign~1 temporal entropy for each concentration, whereas different Campaign~2 SPs occupied the lowest ranks. Entropy rankings therefore did not reproduce a single universal representative location and were retained as a complementary description of state occupancy rather than as the sole stability criterion.
+
+\bibliographystyle{elsarticle-harv}
+\bibliography{references}
+
+\end{document}
