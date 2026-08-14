@@ -1,7 +1,7 @@
 Highlights
 
-- A 51-point network resolved three-dimensional gas heterogeneity in a dairy barn.
-- CO2, CH4 and NH3 concentrations increased systematically with sampling height.
-- No single sampling point represented all gas concentrations and gas ratios.
-- A 34-point network reproduced median dense-network estimates within 2.05%.
-- Reduced networks retained episodic NH3 errors relevant to emission estimates.
+- A 51-point network separated spatial from temporal concentration variability.
+- Temporal change dominated long-term CO2 and CH4 variability in Campaign 1.
+- Near-roof sampling revealed episodic gradients hidden by long-term averages.
+- The 3.6 m level best approximated the Campaign 1 full-network concentration.
+- At least two vertical levels are recommended for representative sampling.
