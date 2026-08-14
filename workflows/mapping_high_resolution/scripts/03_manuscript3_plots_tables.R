@@ -20,6 +20,8 @@ suppressPackageStartupMessages({
   library(lme4)
   library(emmeans)
   library(patchwork)
+  library(plotly)
+  library(htmlwidgets)
 })
 emm_options(lmer.df = "asymptotic")
 
@@ -32,12 +34,20 @@ output_root <- file.path(workflow, "clean_data", "manuscript3_analysis_v01")
 table_dir <- file.path(output_root, "tables")
 audit_dir <- file.path(output_root, "audit")
 plot_dir <- file.path(workflow, "plots", "manuscript3_analysis_v01")
+manuscript_root <- file.path(
+  workflow,
+  "Manuscript_3_Mapping_high_resolution_concentration_Latex_draft"
+)
+figure_dir <- file.path(manuscript_root, "figures")
+supplement_dir <- file.path(manuscript_root, "supplementary")
 run_emission_analysis <- identical(
   tolower(Sys.getenv("MANUSCRIPT3_RUN_EMISSIONS", "false")), "true"
 )
 dir.create(table_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(audit_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(supplement_dir, recursive = TRUE, showWarnings = FALSE)
 
 responses <- c("CO2", "NH3_CO2", "CH4", "CH4_CO2", "NH3", "NH3_CH4")
 response_labels <- c(
@@ -1029,7 +1039,7 @@ fwrite(ratio_outcome_correlations, file.path(
 ##### REPRESENTATIVE HEIGHT/SP AND GAS-COUPLING DIAGNOSTICS
 ###############################################################################
 
-block_location <- long[analysis.eligible == TRUE, .(
+block_location_simple <- long[analysis.eligible == TRUE, .(
   estimate = median(value)
 ), by = .(
   campaign, response, block.2h = floor_date(DATE.TIME, "2 hours"),
@@ -1038,7 +1048,7 @@ block_location <- long[analysis.eligible == TRUE, .(
 
 # Leave-one-SP-out reference prevents a candidate point contributing to its own
 # benchmark. It is evaluated in Campaign 1, where all 51 points were installed.
-c1_loo <- block_location[campaign == "Campaign 1", {
+c1_loo <- block_location_simple[campaign == "Campaign 1", {
   v <- estimate
   ref <- vapply(seq_along(v), function(i) {
     other <- v[-i]
@@ -1092,7 +1102,7 @@ fwrite(sp_composite, file.path(
 
 # Each height is compared with the median of the other two heights, avoiding a
 # self-including whole-network reference.
-c1_height_block <- block_location[campaign == "Campaign 1", .(
+c1_height_block <- block_location_simple[campaign == "Campaign 1", .(
   height.estimate = median(estimate),
   height.points = uniqueN(sampling.point.numeric)
 ), by = .(response, block.2h, height)]
@@ -1122,7 +1132,7 @@ fwrite(height_representativeness, file.path(
 # Gas coupling uses observed two-hour SP medians, not model-derived
 # concentrations. Slopes and R2 are descriptive diagnostics of co-variation.
 gas_block_wide <- dcast(
-  block_location[response %chin% c("CO2", "CH4", "NH3")],
+  block_location_simple[response %chin% c("CO2", "CH4", "NH3")],
   campaign + block.2h + sampling.point.numeric + height ~ response,
   value.var = "estimate"
 )
@@ -1578,6 +1588,324 @@ save_plot("Fig_16_Campaign1_ratio_Q_emission_correlations",
           p_ratio_outcome, width = 8, height = 5.5)
 
 } # end optional emission plots
+
+
+###############################################################################
+##### REVISED MANUSCRIPT CORE: MAGNITUDE, SCALE AND PRACTICAL CONSEQUENCES
+###############################################################################
+
+# The formal null hypothesis is no systematic long-term vertical or horizontal
+# SP effect. Because a large repeated dataset can reject this null for very
+# small effects, the manuscript interpretation is based on effect magnitude,
+# spatial-versus-temporal variance and attenuation with aggregation.
+
+core_gases <- c("CO2", "CH4", "NH3")
+
+# Contemporaneous full-network medians are the campaign-level unit. This avoids
+# giving greater weight to analysers or SPs with more raw rows.
+network_blocks <- block_location[
+  valid.network.block == TRUE & response %chin% core_gases,
+  .(
+    full.network.median = median(block.median),
+    full.network.mean = mean(block.mean),
+    sampling.points = uniqueN(sampling.point),
+    raw.rows = sum(raw.rows)
+  ),
+  by = .(campaign, response, block.2h)
+]
+
+full_network_summary <- network_blocks[, {
+  v <- full.network.median
+  centre <- median(v)
+  .(
+    valid.two.hour.blocks = .N,
+    contributing.raw.rows = sum(raw.rows),
+    median.sampling.points = median(sampling.points),
+    mean = mean(v), median = centre, minimum = min(v), maximum = max(v),
+    SD = sd(v), CV.percent = 100 * sd(v) / mean(v),
+    robust.CV.percent = 100 * 1.4826 * median(abs(v - centre)) / centre
+  )
+}, by = .(campaign, response)]
+fwrite(full_network_summary, file.path(
+  table_dir, "Table_29_full_network_campaign_descriptives.csv"
+))
+
+# Vertical-group medians are compared with the full-network median within the
+# same block. Absolute errors therefore cannot cancel across time.
+height_blocks <- block_location[
+  valid.network.block == TRUE & response %chin% core_gases,
+  .(
+    height.median = median(block.median),
+    height.mean = mean(block.mean),
+    sampling.points = uniqueN(sampling.point)
+  ),
+  by = .(campaign, response, block.2h, height)
+]
+height_blocks <- network_blocks[
+  height_blocks, on = .(campaign, response, block.2h)
+]
+height_blocks[, `:=`(
+  signed.error.percent = 100 * (height.median - full.network.median) /
+    full.network.median,
+  absolute.error.percent = 100 * abs(height.median - full.network.median) /
+    full.network.median
+)]
+
+height_core_summary <- height_blocks[, {
+  observed <- height.median
+  reference <- full.network.median
+  centre <- median(observed)
+  .(
+    valid.two.hour.blocks = .N,
+    median.sampling.points = median(sampling.points),
+    mean = mean(observed), median = centre,
+    minimum = min(observed), maximum = max(observed), SD = sd(observed),
+    CV.percent = 100 * sd(observed) / mean(observed),
+    robust.CV.percent = 100 * 1.4826 * median(abs(observed - centre)) / centre,
+    median.signed.error.percent = median(signed.error.percent),
+    MdAPE.percent = median(absolute.error.percent),
+    NRMSE.percent = 100 * sqrt(mean((observed - reference)^2)) /
+      median(reference),
+    P95.absolute.error.percent = quantile(absolute.error.percent, 0.95)
+  )
+}, by = .(campaign, response, height)]
+fwrite(height_core_summary, file.path(
+  table_dir, "Table_30_vertical_group_effects_and_accuracy.csv"
+))
+
+# Variance partitioning quantifies whether persistent spatial differences or
+# changing time blocks account for more variation after the fixed height effect.
+variance_source <- block_location[
+  valid.network.block == TRUE & response %chin% core_gases &
+    is.finite(block.median) & block.median > 0
+]
+variance_groups <- unique(variance_source[, .(campaign, response)])
+variance_components <- rbindlist(lapply(seq_len(nrow(variance_groups)),
+  function(group_index) {
+    group_key <- variance_groups[group_index]
+    z <- variance_source[
+      campaign == group_key$campaign & response == group_key$response
+    ]
+    fit <- lmer(
+      log(block.median) ~ height +
+        (1 | block.2h) + (1 | sampling.point.numeric),
+      data = z, REML = TRUE
+    )
+    vc <- as.data.table(VarCorr(fit))
+    get_var <- function(group) {
+      value <- vc[grp == group, vcov]
+      if (length(value)) value[[1]] else NA_real_
+    }
+    temporal <- get_var("block.2h")
+    spatial <- get_var("sampling.point.numeric")
+    residual <- get_var("Residual")
+    total <- temporal + spatial + residual
+    data.table(
+      campaign = as.character(z$campaign[[1]]),
+      response = as.character(z$response[[1]]),
+      temporal.variance = temporal,
+      persistent.SP.variance = spatial,
+      residual.variance = residual,
+      temporal.percent = 100 * temporal / total,
+      persistent.SP.percent = 100 * spatial / total,
+      residual.percent = 100 * residual / total
+    )
+  }
+))
+fwrite(variance_components, file.path(
+  table_dir, "Table_31_spatial_temporal_variance_partition.csv"
+))
+
+# Functional zones follow the barn plan. They are used descriptively; missing
+# operating logs prevent causal attribution to feeding, cleaning or cooling.
+zone_lookup <- data.table(
+  horizontal.position = 1:17,
+  functional.zone = c(
+    rep("external lying cubicles", 3),
+    rep("open walking and feeding alley", 4),
+    rep("internal lying cubicles", 4),
+    rep("manure-scraper side", 4),
+    "milking passage", "manure-pit side"
+  )
+)
+
+hourly_sp <- long[
+  analysis.eligible == TRUE & response %chin% core_gases,
+  .(SP.hour.median = median(value), raw.rows = .N),
+  by = .(
+    campaign, response,
+    date = as.Date(DATE.TIME), hour = hour(DATE.TIME),
+    sampling.point.numeric, height
+  )
+]
+hourly_sp[, horizontal.position :=
+            (sampling.point.numeric - 1L) %/% 3L + 1L]
+hourly_sp <- zone_lookup[hourly_sp, on = "horizontal.position"]
+
+hourly_sp_summary <- hourly_sp[, .(
+  observations = .N,
+  mean = mean(SP.hour.median), median = median(SP.hour.median),
+  SD = sd(SP.hour.median), CV.percent = 100 * sd(SP.hour.median) /
+    mean(SP.hour.median)
+), by = .(campaign, response, hour, sampling.point.numeric, height,
+          horizontal.position, functional.zone)]
+fwrite(hourly_sp_summary, file.path(
+  table_dir, "Table_32_diurnal_each_SP_descriptives.csv"
+))
+
+zone_date_hour <- hourly_sp[, .(
+  zone.median = median(SP.hour.median)
+), by = .(campaign, response, date, hour, functional.zone)]
+diurnal_zone_summary <- zone_date_hour[, .(
+  days = uniqueN(date), mean = mean(zone.median), median = median(zone.median),
+  SD = sd(zone.median), Q1 = quantile(zone.median, 0.25),
+  Q3 = quantile(zone.median, 0.75)
+), by = .(campaign, response, hour, functional.zone)]
+fwrite(diurnal_zone_summary, file.path(
+  table_dir, "Table_33_diurnal_functional_zone_summary.csv"
+))
+
+# Main CV heatmap: conventional CV is retained for protocol familiarity; the
+# robust CV remains in the numerical table and interactive supplement.
+cv_heatmap <- copy(sp_variability[response %chin% core_gases])
+cv_heatmap[, horizontal.position :=
+             (sampling.point.numeric - 1L) %/% 3L + 1L]
+p_core_cv <- ggplot(
+  cv_heatmap,
+  aes(factor(horizontal.position), height, fill = pmin(cv.percent, 100))
+) +
+  geom_tile(colour = "white", linewidth = 0.35) +
+  geom_text(aes(label = sampling.point.numeric), size = 2.2) +
+  facet_grid(response ~ campaign, labeller = facet_labels) +
+  scale_fill_gradientn(
+    colours = c("#2166AC", "#67A9CF", "#A6D96A", "#FEE08B",
+                "#F46D43", "#B2182B"),
+    limits = c(0, 100), name = "CV (%)"
+  ) +
+  labs(
+    x = "Horizontal position", y = "Vertical level",
+    title = "Temporal coefficient of variation at each sampling point",
+    subtitle = "Numbers identify SPs; colour scale is capped at 100% for display"
+  ) + common_theme +
+  theme(panel.grid = element_blank(), axis.text.x = element_text(size = 8))
+save_plot("Fig_19_core_CV_heatmaps_campaign1_2", p_core_cv,
+          width = 12, height = 9)
+file.copy(file.path(plot_dir, "Fig_19_core_CV_heatmaps_campaign1_2.pdf"),
+          file.path(figure_dir, "Fig_19_core_CV_heatmaps_campaign1_2.pdf"),
+          overwrite = TRUE)
+
+p_height_boxes <- ggplot(
+  height_blocks,
+  aes(height, height.median, fill = height)
+) +
+  geom_boxplot(outlier.shape = NA, linewidth = 0.3) +
+  facet_grid(response ~ campaign, scales = "free_y", labeller = facet_labels) +
+  scale_fill_manual(values = height_colours, guide = "none") +
+  labs(x = "Vertical sampling level", y = "Two-hour group median",
+       title = "Concentration distributions by vertical sampling level") +
+  common_theme
+save_plot("Fig_20_vertical_group_boxplots_campaign1_2", p_height_boxes,
+          width = 11, height = 9)
+file.copy(file.path(plot_dir, "Fig_20_vertical_group_boxplots_campaign1_2.pdf"),
+          file.path(figure_dir, "Fig_20_vertical_group_boxplots_campaign1_2.pdf"),
+          overwrite = TRUE)
+
+zone_colours <- c(
+  "external lying cubicles" = "#1b9e77",
+  "open walking and feeding alley" = "#d95f02",
+  "internal lying cubicles" = "#7570b3",
+  "manure-scraper side" = "#e7298a",
+  "milking passage" = "#66a61e",
+  "manure-pit side" = "#a6761d"
+)
+p_diurnal <- ggplot(
+  diurnal_zone_summary,
+  aes(hour, median, colour = functional.zone, fill = functional.zone)
+) +
+  geom_ribbon(aes(ymin = Q1, ymax = Q3), alpha = 0.08, colour = NA) +
+  geom_line(linewidth = 0.55) +
+  geom_vline(xintercept = c(5.5, 10.5), linetype = "solid",
+             colour = "grey30", linewidth = 0.3) +
+  geom_vline(xintercept = c(10.5, 12, 19), linetype = "dashed",
+             colour = "grey30", linewidth = 0.3) +
+  facet_grid(response ~ campaign, scales = "free_y", labeller = facet_labels) +
+  scale_x_continuous(breaks = 0:23, limits = c(0, 23)) +
+  scale_colour_manual(values = zone_colours, name = "Functional zone") +
+  scale_fill_manual(values = zone_colours, guide = "none") +
+  labs(
+    x = "Hour of day", y = "Median concentration",
+    title = "Diurnal concentration profiles by functional barn zone",
+    subtitle = paste(
+      "Solid lines: feeding at 05:30 and 10:30; dashed lines:",
+      "feed pushing at 10:30, 12:00 and 19:00"
+    )
+  ) + common_theme +
+  theme(axis.text.x = element_text(size = 6), legend.position = "bottom")
+save_plot("Fig_21_diurnal_functional_zone_profiles", p_diurnal,
+          width = 13, height = 10)
+file.copy(file.path(plot_dir, "Fig_21_diurnal_functional_zone_profiles.pdf"),
+          file.path(figure_dir, "Fig_21_diurnal_functional_zone_profiles.pdf"),
+          overwrite = TRUE)
+
+# Interactive supplement: horizontal position x height x metric. Dropdowns
+# allow CV, robust CV, MdAPE and NRMSE to be inspected for every response and
+# campaign. This is an exploratory supplement, not a model-derived surface.
+interactive_metrics <- merge(
+  sp_variability[, .(
+    campaign, response, sampling.point.numeric, height,
+    CV = cv.percent, robust.CV = robust.cv.percent,
+    MdAPE = median.absolute.RE.percent
+  )],
+  block_location[valid.network.block == TRUE, .(
+    NRMSE = 100 * sqrt(mean((block.median - loo.network.median)^2)) /
+      median(loo.network.median)
+  ), by = .(campaign, response, sampling.point.numeric)],
+  by = c("campaign", "response", "sampling.point.numeric"), all.x = TRUE
+)
+interactive_metrics[, `:=`(
+  horizontal.position = (sampling.point.numeric - 1L) %/% 3L + 1L,
+  height.index = fcase(height == "bottom", 1, height == "middle", 2,
+                       height == "top", 3, default = NA_real_)
+)]
+interactive_long <- melt(
+  interactive_metrics,
+  id.vars = c("campaign", "response", "sampling.point.numeric", "height",
+              "horizontal.position", "height.index"),
+  measure.vars = c("CV", "robust.CV", "MdAPE", "NRMSE"),
+  variable.name = "metric", value.name = "percent"
+)
+interactive_long[, panel := paste(campaign, response, metric, sep = " | ")]
+interactive_plot <- plot_ly(
+  interactive_long,
+  x = ~horizontal.position, y = ~height.index, z = ~percent,
+  color = ~percent,
+  colors = c("#30123b", "#4145ab", "#2a7ab9", "#1bb5a7", "#6ece58",
+             "#d8e219", "#fdae32", "#e85b1a", "#7a0403"),
+  type = "scatter3d", mode = "markers",
+  frame = ~panel,
+  text = ~paste0(
+    "Campaign: ", campaign, "<br>Response: ", response,
+    "<br>Metric: ", metric, "<br>SP: ", sampling.point.numeric,
+    "<br>Height: ", height, "<br>Value: ", round(percent, 2), "%"
+  ), hoverinfo = "text", marker = list(size = 5)
+) %>% layout(
+  title = "Interactive spatial variability and representativeness",
+  scene = list(
+    xaxis = list(title = "Horizontal position"),
+    yaxis = list(title = "Height index (1 bottom, 2 middle, 3 top)"),
+    zaxis = list(title = "Metric (%)")
+  )
+)
+pandoc_dir <- "C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools"
+if (file.exists(file.path(pandoc_dir, "pandoc.exe"))) {
+  Sys.setenv(RSTUDIO_PANDOC = pandoc_dir)
+}
+saveWidget(
+  interactive_plot,
+  file.path(supplement_dir,
+            "Supplement_S1_interactive_3D_SP_metrics.html"),
+  selfcontained = TRUE, title = "Manuscript 3 interactive SP metrics"
+)
 
 
 ###############################################################################
