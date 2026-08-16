@@ -59,3 +59,15 @@ rather than copied TeX files, provide version history.
 
 The journal currently requests Microsoft Word source files by default.
 The LaTeX draft can be converted after the scientific content is stable.
+
+## Citation, reference, and prose policy
+
+- Cite every scholarly source with a `natbib` command such as `\citet{}` or
+  `\citep{}`. Do not type author--year citations manually.
+- Load `natbib` before `hyperref`. Every in-text citation must link to its
+  corresponding bibliography entry in the compiled PDF.
+- Every citation key must resolve in `references.bib`. Each reference should
+  include a DOI when one exists, or a stable source URL otherwise.
+- Compile with BibTeX and confirm that no undefined citation or reference
+  warnings remain before committing manuscript changes.
+- Use full stops rather than semicolons in manuscript prose.
