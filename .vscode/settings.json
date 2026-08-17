@@ -1,0 +1,26 @@
+{
+  "latex-workshop.latex.tools": [
+    {
+      "name": "pdflatex-miktex",
+      "command": "C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\pdflatex.exe",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "-halt-on-error",
+        "%DOC%"
+      ],
+      "env": {}
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "MiKTeX pdflatex",
+      "tools": [
+        "pdflatex-miktex"
+      ]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "first",
+  "latex-workshop.latex.outDir": "%DIR%"
+}
