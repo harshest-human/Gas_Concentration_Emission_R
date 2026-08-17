@@ -7,11 +7,27 @@
   `sampling.point`, saves analyser-wise and campaign-wise CSVs, and row-binds
   Campaigns 1--4.
 - `03_manuscript3_plots_tables.R`: current Campaign 1--2 Manuscript 3 analysis.
-  It produces median-based representativeness tables, mean and median with SD,
-  shared-scale concentration and ratio plots, and Shannon entropy. It does not
-  modify LaTeX and currently excludes CV and relative error.
+  It produces campaign and SP descriptives, vertical mixed-effects models,
+  temporal-resolution comparisons, conventional and robust CV, median-based
+  representativeness diagnostics, Shannon entropy, ventilation and emission
+  sensitivity tables, and manuscript figures. It does not modify LaTeX.
 - `02_manuscript3_dwd_weather.R`: prepares DWD regional meteorology and
   produces the Manuscript 3 weather figures.
+
+## Literature workflow
+
+- `literature_ingest.ps1`: reads the version-controlled paper registry and uses
+  `pdftotext` to create a searchable local text cache. It never edits the
+  original PDFs, performs no OCR, and writes only under
+  `knowledge_base/02_source_cache/`, which is excluded from Git.
+
+Examples:
+
+```text
+.\literature_ingest.ps1 -List
+.\literature_ingest.ps1 -Key Declerck2025,Janke2022
+.\literature_ingest.ps1 -AllSources
+```
 
 ## Active Campaign 3--4 supporting workflow
 
