@@ -14,6 +14,22 @@
 - `02_manuscript3_dwd_weather.R`: prepares DWD regional meteorology and
   produces the Manuscript 3 weather figures.
 
+## CRDS dwell-allocation sensitivity workflow
+
+- `04_prepare_crds_180s_flush_60s_average_all_campaigns.R`: reconstructs
+  cyclic CRDS measurements from the recovered per-second archives for all four
+  campaigns, discards the first 180 s of each accepted nominal 240-s dwell,
+  averages the following 60 s, maps the original selector position to
+  `sampling.point`, and row-binds CRDS and native FTIR observations. Generated
+  CSV files are written to the ignored versioned directory
+  `clean_data/crds_180s_flush_60s_sensitivity_v01`.
+- `05_crds_180s_flush_60s_statistics_plots.R`: derives dimensionless gas
+  ratios, descriptive statistics, CV, block-wise median leave-one-out relative
+  errors, vertical-group likelihood-ratio tests, and crossed spatial-temporal
+  mixed models. It produces the versioned plot set in
+  `plots/crds_180s_flush_60s_sensitivity_v01`. Shannon entropy is not used in
+  this sensitivity workflow.
+
 ## Literature workflow
 
 - `literature_ingest.ps1`: reads the version-controlled paper registry and uses
