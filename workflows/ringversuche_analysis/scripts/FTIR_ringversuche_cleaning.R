@@ -5,8 +5,10 @@
 # 2025-04-08..2025-04-15 window and writes V5-format clean data that
 # Ringversuche_analysis_script.R can consume.
 #
-# Outputs per analyzer (in clean_data/Version_6/):
-#   20250408-15_7.5_avg_<lab>_<analyzer>.csv  - cycle-level (7.5 min)
+# Outputs per analyzer:
+#   clean_data/20250408-15_concentrations_7.5minute_data/
+#     20250408-15_7.5_avg_<lab>_<analyzer>.csv  - cycle-level (7.5 min)
+#   clean_data/Version_9/
 #   20250408-15_long_<lab>_<analyzer>.csv     - hourly, one row per (hour, location)
 #   20250408-15_wide_<lab>_<analyzer>.csv     - hourly, pivoted by location
 #
@@ -37,7 +39,7 @@ suppressPackageStartupMessages({
 
 # ---- paths & helpers --------------------------------------------------------
 proj_root  <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
-utils_dir  <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/scripts/utils"
+utils_dir  <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/utils"
 
 source(file.path(utils_dir, "round to interval function.R"))     # round_to_interval()
 source(file.path(utils_dir, "remove_outliers_function.R"))        # remove_outliers()
@@ -52,7 +54,11 @@ location_cycle <- c("in", "N", "in", "S")    # 4 * 450 s = 30 min super-cycle
 
 out_version  <- "Version_9"
 out_dir      <- file.path(proj_root, "clean_data", out_version)
+interval_out_dir <- file.path(
+        proj_root, "clean_data", "20250408-15_concentrations_7.5minute_data"
+)
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(interval_out_dir, showWarnings = FALSE, recursive = TRUE)
 file_stub    <- "20250408-15"
 
 # ---- raw readers ------------------------------------------------------------
@@ -225,7 +231,8 @@ make_hourly_wide_v5 <- function(df_long, lab_name) {
                 arrange(DATE.TIME)
 }
 
-write_outputs <- function(df_cycle, lab_name, analyzer_name, out_dir, file_stub) {
+write_outputs <- function(df_cycle, lab_name, analyzer_name, out_dir,
+                          interval_out_dir, file_stub) {
         gas_cols <- intersect(c("CO2","CH4","NH3","H2O","N2O"), names(df_cycle))
         # Snap to 7.5-min grid.
         cycle_df <- df_cycle %>%
@@ -269,8 +276,9 @@ write_outputs <- function(df_cycle, lab_name, analyzer_name, out_dir, file_stub)
                 mutate(lab = lab_name, analyzer = analyzer_name) %>%
                 select(DATE.TIME, location, lab, analyzer, all_of(gas_cols))
 
-        cycle_path <- file.path(out_dir, sprintf("%s_7.5_avg_%s_%s.csv",
-                                                 file_stub, lab_name, analyzer_name))
+        cycle_path <- file.path(interval_out_dir,
+                                sprintf("%s_7.5_avg_%s_%s.csv",
+                                        file_stub, lab_name, analyzer_name))
         write_excel_csv(cycle_out, cycle_path)
         cat(sprintf("  -> %s  (%d rows)\n", basename(cycle_path), nrow(cycle_out)))
 
@@ -307,7 +315,7 @@ cat(sprintf("  Line value counts: %s\n",
 
 atb_cycle <- cycle_average_by_line(atb_sec,
                                    line_to_loc = c("1"="N", "2"="in", "3"="S"))
-write_outputs(atb_cycle, "ATB", "FTIR.1", out_dir, file_stub)
+write_outputs(atb_cycle, "ATB", "FTIR.1", out_dir, interval_out_dir, file_stub)
 
 # =============================================================================
 # 2)  LUFA FTIR.2
@@ -330,7 +338,7 @@ cat(sprintf("  Line value counts: %s\n",
 
 lufa_cycle <- cycle_average_by_line(lufa_sec,
                                     line_to_loc = c("1"="in", "2"="S", "3"="N"))
-write_outputs(lufa_cycle, "LUFA", "FTIR.2", out_dir, file_stub)
+write_outputs(lufa_cycle, "LUFA", "FTIR.2", out_dir, interval_out_dir, file_stub)
 
 # =============================================================================
 # 3)  MBBM FTIR.3
@@ -347,10 +355,10 @@ cat(sprintf("  raw rows in window: %d\n", nrow(mbbm_sec)))
 
 mbbm_cycle <- cycle_average_by_time(mbbm_sec, start_time, end_time,
                                     flush_sec, interval_sec, location_cycle)
-write_outputs(mbbm_cycle, "MBBM", "FTIR.3", out_dir, file_stub)
+write_outputs(mbbm_cycle, "MBBM", "FTIR.3", out_dir, interval_out_dir, file_stub)
 
 # =============================================================================
-# 4)  ANECO FTIR.4
+# 4)  ANECO FTIR.4 legacy export (intentionally excluded: noFTIR4old)
 # =============================================================================
 cat("\n============================================================\n")
 cat("Processing ANECO FTIR.4\n")
@@ -359,7 +367,8 @@ cat("============================================================\n")
 aneco_dir <- file.path(proj_root, "raw_data/ANECO/ANECO_roh/ANECO_calcamet_results")
 aneco_files <- list.files(aneco_dir, pattern = "^RESULTS_\\d{6}\\.TXT$", full.names = TRUE)
 
-if (length(aneco_files) > 0) {
+include_ftir4_old <- FALSE
+if (include_ftir4_old && length(aneco_files) > 0) {
   aneco_raw <- read_aneco_daily_results(aneco_dir)
   cat(sprintf("  raw rows total: %d\n", nrow(aneco_raw)))
 
@@ -380,9 +389,12 @@ if (length(aneco_files) > 0) {
 
   aneco_cycle <- cycle_average_by_time(aneco_sec, start_time, end_time,
                                        flush_sec, interval_sec, location_cycle)
-  write_outputs(aneco_cycle, "ANECO", "FTIR.4_old", out_dir, file_stub)
-} else {
+  write_outputs(aneco_cycle, "ANECO", "FTIR.4_old", out_dir,
+                interval_out_dir, file_stub)
+} else if (include_ftir4_old) {
   cat("  WARN: No daily ANECO RESULTS files (RESULTS_DDMMYY.TXT) found. Skipping FTIR.4.\n")
+} else {
+  cat("  skipped by configuration (noFTIR4old).\n")
 }
 
 # =============================================================================
@@ -413,7 +425,8 @@ if (file.exists(aneco_v2_path)) {
 
   aneco_v2_cycle <- cycle_average_by_time(aneco_v2_sec, start_time, end_time,
                                           flush_sec, interval_sec, location_cycle)
-  write_outputs(aneco_v2_cycle, "ANECO", "FTIR.4", out_dir, file_stub)
+  write_outputs(aneco_v2_cycle, "ANECO", "FTIR.4", out_dir,
+                interval_out_dir, file_stub)
 } else {
   cat(sprintf("  WARN: file not found: %s\n", basename(aneco_v2_path)))
 }
@@ -439,4 +452,3 @@ for (f in lufa_crds_files) {
 }
 
 cat("\nDone. Run analysis with data_version <- \"Version_6\".\n")
-

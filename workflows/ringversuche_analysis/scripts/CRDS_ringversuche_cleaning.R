@@ -5,8 +5,10 @@
 # window and writes V5-format clean data that the Ringversuche_analysis_script.R
 # can consume.
 #
-# Outputs per analyzer (in clean_data/Version_6/):
-#   20250408-15_7.5_avg_<lab>_<analyzer>.csv  - cycle-level (7.5 min) intermediate
+# Outputs per analyzer:
+#   clean_data/20250408-15_concentrations_7.5minute_data/
+#     20250408-15_7.5_avg_<lab>_<analyzer>.csv  - cycle-level (7.5 min)
+#   clean_data/Version_9/
 #   20250408-15_long_<lab>_<analyzer>.csv     - hourly, one row per (hour, location)
 #   20250408-15_wide_<lab>_<analyzer>.csv     - hourly, pivoted by location
 #
@@ -51,16 +53,16 @@ suppressPackageStartupMessages({
 
 # ---- helpers ----------------------------------------------------------------
 proj_root  <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/workflows/ringversuche_analysis"
-helpers_dir_crds <- file.path(proj_root, "Picarro-G2508_CRDS_gas_measurement")
-utils_dir        <- "D:/Data_Analysis_R/Gas_Concentration_Emission_R/scripts/utils"
+crds_helper_file <- file.path(
+        dirname(proj_root), "crds_routine_cleaning", "scripts",
+        "crds_weekly_cleaning.R"
+)
+utils_dir <- file.path(dirname(proj_root), "utils")
 
-# piclean() is defined in Picarro_CRDS_data_cleaning_script.R in
-# Picarro-G2508_CRDS_gas_measurement/ — NOTE: if that file is missing, the
-# main loop below cannot run (it depends on piclean()). The 7.5-min CSVs
-# already in clean_data/Version_9/ were produced by an earlier run when
-# piclean was available; restoring that file is the prerequisite for any
-# fresh CRDS re-clean.
-source(file.path(helpers_dir_crds, "Picarro_CRDS_data_cleaning_script.R"))  # piclean()
+# The maintained CRDS helper script also contains scheduled production calls.
+# Load only its first top-level expression (the piclean function definition),
+# so this Ringversuche run cannot trigger those unrelated jobs.
+eval(parse(file = crds_helper_file, keep.source = FALSE)[1], envir = environment())
 source(file.path(utils_dir,        "remove_outliers_function.R"))           # remove_outliers() — canonical copy
 source(file.path(utils_dir,        "round to interval function.R"))         # round_to_interval()
 
@@ -74,7 +76,11 @@ gases        <- c("CO2", "CH4", "NH3", "H2O", "N2O")
 
 out_version  <- "Version_9"
 out_dir      <- file.path(proj_root, "clean_data", out_version)
+interval_out_dir <- file.path(
+        proj_root, "clean_data", "20250408-15_concentrations_7.5minute_data"
+)
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(interval_out_dir, showWarnings = FALSE, recursive = TRUE)
 
 file_stub    <- "20250408-15"   # matches existing V5 naming
 
@@ -84,7 +90,9 @@ lab_configs <- list(
         list(
                 lab            = "ATB",
                 analyzer       = "CRDS.1",
-                input_path     = "D:/Data_Analysis_R/CRDS_raw_recovered/Picarro_G2508/CRDS08_raw/2025/04",
+                input_path     = file.path(
+                        proj_root, "raw_data/ATB/CRDS.1/CRDS08_raw_recovered"
+                ),
                 mpv_levels     = c("1", "2", "3"),
                 location_levels = c("N", "in", "S"),
                 time_offset_sec = 0
@@ -180,7 +188,7 @@ for (cfg in lab_configs) {
         # analyzers log in UTC, so use force_tz to relabel without shifting
         # the wall-clock value (otherwise output is off by the local UTC
         # offset, e.g. -2 h on a CEST machine).
-        cycle_df <- cycle_df %>%
+        cycle_df <- as_tibble(cycle_df) %>%
                 mutate(DATE.TIME = lubridate::force_tz(DATE.TIME, "UTC") +
                                    cfg$time_offset_sec)
 
@@ -232,7 +240,7 @@ for (cfg in lab_configs) {
         cycle_out <- cycle_df %>%
                 select(DATE.TIME, MPVPosition, location, lab, analyzer,
                        any_of(c("CO2", "CH4", "NH3", "H2O", "N2O")))
-        cycle_path <- file.path(out_dir,
+        cycle_path <- file.path(interval_out_dir,
                                 sprintf("%s_7.5_avg_%s_%s.csv",
                                         file_stub, cfg$lab, cfg$analyzer))
         write_excel_csv(cycle_out, cycle_path)
