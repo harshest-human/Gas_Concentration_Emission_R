@@ -27,49 +27,27 @@ workflows/crds_routine_cleaning/*
 workflows/crds_routine_cleaning/scripts/*
 !workflows/crds_routine_cleaning/scripts/crds_weekly_cleaning.R
 
-# Allow mapping workflow code, metadata, manuscript sources, figures, and
-# publication plots. Raw and cleaned measurement data remain ignored.
+# Allow only the mapping workflow's reproducible analysis code and code
+# manifest. Research data, metadata, notes, literature work, manuscript
+# sources, compiled documents, tables, figures, and plots remain local-only.
 !workflows/mapping_high_resolution/
 workflows/mapping_high_resolution/*
-!workflows/mapping_high_resolution/AGENTS.md
-!workflows/mapping_high_resolution/knowledge_base/
-!workflows/mapping_high_resolution/knowledge_base/**
-workflows/mapping_high_resolution/knowledge_base/02_source_cache/**
-!workflows/mapping_high_resolution/knowledge_base/02_source_cache/.gitignore
 !workflows/mapping_high_resolution/scripts/
 workflows/mapping_high_resolution/scripts/*
 !workflows/mapping_high_resolution/scripts/*.R
-!workflows/mapping_high_resolution/scripts/literature_ingest.ps1
 !workflows/mapping_high_resolution/scripts/SCRIPT_MANIFEST.md
-!workflows/mapping_high_resolution/gemini_literature_review/
-!workflows/mapping_high_resolution/gemini_literature_review/**
-workflows/mapping_high_resolution/gemini_literature_review/node_modules/
-workflows/mapping_high_resolution/gemini_literature_review/.env
-workflows/mapping_high_resolution/gemini_literature_review/outputs/
-!workflows/mapping_high_resolution/gemini_literature_review/outputs/.gitkeep
-!workflows/mapping_high_resolution/meta_data/
-workflows/mapping_high_resolution/meta_data/*
-!workflows/mapping_high_resolution/meta_data/*.txt
-!workflows/mapping_high_resolution/plots/
-workflows/mapping_high_resolution/plots/*
-!workflows/mapping_high_resolution/plots/**/
-!workflows/mapping_high_resolution/plots/**/*.png
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/
-workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.tex
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.bib
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.md
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.txt
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/*.pdf
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/versions/
-workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/versions/*
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/versions/*.tex
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/.vscode/
-workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/.vscode/*
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/.vscode/settings.json
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/figures/
-workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/figures/*
-!workflows/mapping_high_resolution/Manuscript_3_Mapping_high_resolution_concentration_Latex_draft/figures/*.png
+
+# Explicit local-only research areas. These rules document the intended policy
+# even though the mapping workflow is ignored by default above.
+workflows/mapping_high_resolution/AGENTS.md
+workflows/mapping_high_resolution/clean_data/
+workflows/mapping_high_resolution/gemini_literature_review/
+workflows/mapping_high_resolution/knowledge_base/
+workflows/mapping_high_resolution/Manuscript_*/
+workflows/mapping_high_resolution/meta_data/
+workflows/mapping_high_resolution/notes/
+workflows/mapping_high_resolution/plots/
+workflows/mapping_high_resolution/scripts/literature_ingest.ps1
 
 # Allow shared lightweight workflow utility functions.
 !workflows/utils/
