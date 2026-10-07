@@ -27,5 +27,6 @@ run_step("plot_campaign_monthly_device_comparison.R")
 run_step("summarize_cigr_conference_metrics.R")
 run_step("run_device_comparison_period.R")
 run_step("plot_pronova_vs_crds_2026.R")
+run_step("summarize_dec_2025_mean_sd.R")
 
 cat("Finished rebuilding device comparison outputs.\n")
